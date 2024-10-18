@@ -1,0 +1,31 @@
+{
+  "volatilityThreshold": 0.05,
+  "strategies": [
+    {
+      "name": "Spot",
+      "params": {
+        "apiKey": "${METEORA_API_KEY}",
+        "otherParam": "value"
+      }
+    },
+    {
+      "name": "Curve",
+      "params": {
+        "apiKey": "${METEORA_API_KEY}",
+        "otherParam": "value"
+      }
+    },
+    {
+      "name": "BidAsk",
+      "params": {
+        "apiKey": "${METEORA_API_KEY}",
+        "otherParam": "value"
+      }
+    }
+  ],
+  "emailSettings": {
+    "username": "${EMAIL_USERNAME}",
+    "password": "${EMAIL_PASSWORD}",
+    "recipients": ["recipient@example.com"]
+  }
+}
