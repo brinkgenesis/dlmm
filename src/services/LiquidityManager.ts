@@ -5,16 +5,23 @@ import { SpotStrategy } from '../strategies/SpotStrategy';
 import { CurveStrategy } from '../strategies/CurveStrategy';
 import { BidAskStrategy } from '../strategies/BidAskStrategy';
 import { ReportingService } from './ReportingService';
+import DLMM from '@meteora-ag/dlmm';
 
 export class LiquidityManager {
   private config: Config;
   private strategies: Map<string, BaseStrategy>;
   private reportingService: ReportingService;
+  private dlmm: DLMM;
 
   constructor(config: Config, reportingService: ReportingService) {
     this.config = config;
     this.reportingService = reportingService;
     this.strategies = new Map();
+    this.dlmm = new DLMM({
+      connection: config.connection,
+      wallet: config.wallet,
+      // Additional configuration as required
+    });
 
     this.initializeStrategies();
   }

@@ -1,22 +1,27 @@
 import { BaseStrategy } from './BaseStrategy';
-import { ApiClient } from '../utils/ApiClient';
+import DLMM from '@meteora-ag/dlmm';
+import { Config } from '../models/Config';
 
 export class SpotStrategy extends BaseStrategy {
-  private apiClient: ApiClient;
+  private dlmm: DLMM;
 
   constructor(params: any) {
     super(params);
-    this.apiClient = new ApiClient(params.apiKey);
+    const config = Config.load();
+    this.dlmm = new DLMM({
+      apiKey: config.meteoraApiKey,
+      walletPrivateKey: config.walletPrivateKey,
+      // Additional configuration as required
+    });
   }
 
   async execute(): Promise<void> {
-    // Logic to provide liquidity uniformly across the price range
     try {
       console.log('Executing Spot Strategy');
-      // Use Meteora SDK to add liquidity
-      await this.apiClient.initializePositionAndAddLiquidityByStrategy({
+      await this.dlmm.initializePositionAndAddLiquidityByStrategy({
         strategy: 'Spot',
-        params: this.params
+        // Provide necessary parameters as per SDK documentation
+        params: this.params,
       });
     } catch (error) {
       console.error('Spot Strategy execution failed:', error);
