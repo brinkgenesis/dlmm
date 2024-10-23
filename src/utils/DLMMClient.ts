@@ -4,6 +4,16 @@ import { Config } from '../models/Config';
 import '@coral-xyz/anchor';
 
 /**
+ * Represents a user's position.
+ */
+interface UserPosition {
+  positionData: {
+    positionBinData: any; // Replace with the actual type
+  };
+  // Add other relevant fields here
+}
+
+/**
  * DLMMClient is responsible for initializing the Meteora DLMM SDK and retrieving active bins.
  */
 export class DLMMClient {
@@ -25,10 +35,7 @@ export class DLMMClient {
   async initializeDLMMPool(pubkey: PublicKey): Promise<void> {
     try {
       // Initialize DLMM Pool using Connection, API Key, and Wallet Keypair from Config
-      this.dlmmPool = await DLMM.create(this.config.connection, pubkey, {
-        programId: new PublicKey(this.config.publickey),
-        cluster: "mainnet-beta",
-      });
+      this.dlmmPool = await DLMM.create(this.config.connection, pubkey);
 
       console.log('DLMM SDK initialized successfully with pool:', pubkey.toBase58());
     } catch (error: any) {
@@ -65,6 +72,38 @@ export class DLMMClient {
       throw error;
     }
   }
+
+  /**
+   * Retrieves user positions from the initialized DLMM pool.
+   */
+  async getUserPositions(): Promise<void> {
+    try {
+      if (!this.dlmmPool) {
+        throw new Error('DLMM Pool is not initialized. Call initializeDLMMPool() first.');
+      }
+
+      // Ensure that the config has the correct property name
+      const userPublicKey = new PublicKey(this.config.publickey); // Changed from 'publickey' to 'publicKey'
+      console.log(`Fetching positions for user: ${userPublicKey.toBase58()}`);
+
+      // Fetch user positions using the initialized dlmmPool
+      const { userPositions } = await this.dlmmPool.getPositionsByUserAndLbPair(userPublicKey);
+
+      if (!userPositions || userPositions.length === 0) {
+        console.log('No positions found for the user.');
+        return;
+      }
+
+      // Extract and log bin data from each position
+      userPositions.forEach((position: UserPosition, index: number) => { // Replaced 'any' with 'UserPosition'
+        const binData = position.positionData.positionBinData;
+        console.log(`Position ${index + 1}:`, position);
+        console.log(`Bin Data ${index + 1}:`, binData);
+      });
+    } catch (error: any) {
+      console.error('Error fetching user positions:', error.message || error);
+    }
+  }
 }
 
 /**
@@ -90,6 +129,9 @@ export class DLMMClient {
     // Get the active bin
     const activeBin = await client.getActiveBin();
     console.log('Active Bin:', activeBin);
+
+    // Get user positions
+    await client.getUserPositions();
   } catch (error: any) {
     console.error('Error running DLMMClient:', error.message || error);
   }
