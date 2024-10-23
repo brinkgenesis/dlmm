@@ -1,4 +1,4 @@
-import { PublicKey } from '@solana/web3.js';
+import { PublicKey, Cluster } from '@solana/web3.js';
 import DLMM from '@meteora-ag/dlmm';
 import { Config } from '../models/Config';
 import '@coral-xyz/anchor';
@@ -24,8 +24,11 @@ export class DLMMClient {
    */
   async initializeDLMMPool(pubkey: PublicKey): Promise<void> {
     try {
-      // Initialize DLMM Pool using Connection from Config
-      this.dlmmPool = await DLMM.create(this.config.connection, pubkey);
+      // Initialize DLMM Pool using Connection, API Key, and Wallet Keypair from Config
+      this.dlmmPool = await DLMM.create(this.config.connection, pubkey, {
+        programId: new PublicKey(this.config.publickey),
+        cluster: "mainnet-beta",
+      });
 
       console.log('DLMM SDK initialized successfully with pool:', pubkey.toBase58());
     } catch (error: any) {
@@ -69,7 +72,7 @@ export class DLMMClient {
  */
 (async () => {
   try {
-    // Load configuration
+    // Load your configuration
     const config = Config.load();
     console.log('Configuration loaded successfully.');
 
@@ -81,7 +84,7 @@ export class DLMMClient {
     const poolPublicKey = new PublicKey('ARwi1S4DaiTG5DX7S4M4ZsrXqpMD1MrTmbu9ue2tpmEq'); // Replace with your actual pool public key
 
     // Initialize the DLMM Pool
-    await client.initializeDLMMPool(poolPublicKey); 
+    await client.initializeDLMMPool(poolPublicKey);
     console.log('DLMM Pool initialized.');
 
     // Get the active bin
