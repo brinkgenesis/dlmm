@@ -1,5 +1,5 @@
-import { PublicKey, Connection, sendAndConfirmTransaction, Transaction } from '@solana/web3.js';
-import DLMM from '@meteora-ag/dlmm';
+import { PublicKey, Connection, sendAndConfirmTransaction, Transaction, Signer, Keypair, TransactionSignature } from '@solana/web3.js';
+import DLMM, { StrategyType, StrategyParameters, LbPosition, SwapQuote } from '@meteora-ag/dlmm';
 import { Config } from '../models/Config';
 import '@coral-xyz/anchor';
 import BN from 'bn.js';
@@ -7,7 +7,7 @@ import {
   getAssociatedTokenAddress, 
   getAccount, 
   createAssociatedTokenAccountInstruction 
-} from '@solana/spl-token'; // Correct import
+} from '@solana/spl-token';
 import { SendTransactionError } from '@solana/web3.js';
 
 /**
@@ -120,9 +120,9 @@ export class DLMMClient {
         throw new Error('DLMM Pool is not initialized. Call initializeDLMMPool() first.');
       }
 
+      const userPublicKey = this.config.walletKeypair.publicKey;
       const tokenXMint = this.dlmmPool.tokenX.publicKey;
       const tokenYMint = this.dlmmPool.tokenY.publicKey;
-      const userPublicKey = this.config.walletKeypair.publicKey;
       const payer = this.config.walletKeypair;
 
       // Derive ATAs for Token X and Token Y
@@ -189,11 +189,10 @@ export class DLMMClient {
         throw new Error('DLMM Pool is not initialized. Call initializeDLMMPool() first.');
       }
 
-      const userPublicKey = this.config.walletKeypair.publicKey;
+      const userPublicKey = new PublicKey(this.config.publickey);
       const tokenXMint = this.dlmmPool.tokenX.publicKey;
       const tokenYMint = this.dlmmPool.tokenY.publicKey;
 
-      // Derive ATAs for Token X and Token Y
       const ataTokenX = await getAssociatedTokenAddress(tokenXMint, userPublicKey);
       const ataTokenY = await getAssociatedTokenAddress(tokenYMint, userPublicKey);
 
@@ -262,6 +261,124 @@ export class DLMMClient {
       }
     }
   }
+
+  /**
+   * Creates a new liquidity position within the DLMM pool.
+   * @param totalXAmount - The total amount of Token X to add to the liquidity pool.
+   * @param strategyType - The strategy type to use for adding liquidity (as defined in the DLMM SDK).
+   * @param slippage - The slippage percentage to be used for the liquidity pool (in BPS).
+   */
+  async createPosition(
+    totalXAmount: BN,
+    strategyType: StrategyType,
+  ): Promise<void> {
+    try {
+      console.log('--- Initiating createPosition ---');
+      console.log(`Strategy Type: ${StrategyType[strategyType]}`);
+
+
+      if (!this.dlmmPool) {
+        throw new Error('DLMM Pool is not initialized. Call initializeDLMMPool() first.');
+      }
+
+      // Retrieve active bin information
+      const { activeBin } = await this.dlmmPool.getPositionsByUserAndLbPair(this.config.walletKeypair.publicKey);
+      console.log('Retrieved Active Bin:', activeBin);
+
+      if (!activeBin) {
+        throw new Error('Active bin not found. Ensure the pool has active bins.');
+      }
+
+      // Calculate min and max bin IDs based on active bin
+      const TOTAL_RANGE_INTERVAL = 10; // 10 bins on each side of the active bin
+      const minBinId = activeBin.binId - TOTAL_RANGE_INTERVAL;
+      const maxBinId = activeBin.binId + TOTAL_RANGE_INTERVAL;
+
+      // Validate bin IDs against DLMM SDK constraints (if any)
+      // Example:
+      // const MIN_BIN_ID = -443636;
+      // const MAX_BIN_ID = 443636;
+      // if (minBinId < MIN_BIN_ID || maxBinId > MAX_BIN_ID) {
+      //   throw new Error(`Bin IDs must be between ${MIN_BIN_ID} and ${MAX_BIN_ID}.`);
+      // }
+
+      // Convert price per lamport to real price
+      const activeBinPricePerTokenStr = this.dlmmPool.fromPricePerLamport(Number(activeBin.price));
+      console.log(`Active Bin Price per Token (String): ${activeBinPricePerTokenStr}`);
+
+      const activeBinPricePerToken = parseFloat(activeBinPricePerTokenStr);
+      console.log(`Active Bin Price per Token (Number): ${activeBinPricePerToken}`);
+
+      // Calculate totalYAmount based on activeBinPricePerToken
+      const totalYAmount = totalXAmount.mul(new BN(Math.floor(activeBinPricePerToken)));
+
+      console.log(`Total Bin Spread: ${TOTAL_RANGE_INTERVAL}`);
+      console.log(`Smallest Bin ID: ${minBinId}`);
+      console.log(`Largest Bin ID: ${maxBinId}`);
+      console.log(`Total Token X Size: ${totalXAmount.toString()}`);
+      console.log(`Total Token Y Size: ${totalYAmount.toString()}`);
+
+      // Generate a new Keypair for the position
+      const positionKeypair = Keypair.generate();
+      const positionPubKey = positionKeypair.publicKey;
+      console.log(`Generated Position Keypair: ${positionPubKey.toBase58()}`);
+
+      // Define the strategy parameters as per DLMM SDK documentation
+      const strategy: StrategyParameters = {
+        minBinId,
+        maxBinId,
+        strategyType,
+        // singleSidedX: false, // Optional: Uncomment and set if needed
+      };
+      console.log('Strategy Parameters:', strategy);
+
+      // Fetch the latest blockhash
+      const { blockhash } = await this.config.connection.getLatestBlockhash('finalized');
+      console.log(`Fetched Latest Blockhash: ${blockhash}`);
+
+      // Prepare the transaction using the DLMM SDK's initializePositionAndAddLiquidityByStrategy method
+      const createPositionTx = await this.dlmmPool.initializePositionAndAddLiquidityByStrategy({
+        positionPubKey,
+        user: this.config.walletKeypair.publicKey,
+        totalXAmount,
+        totalYAmount,
+        strategy,
+      });
+
+      // Signers for the transaction: the user and the new position keypair
+      const signers: Signer[] = [this.config.walletKeypair, positionKeypair];
+
+      // Send and confirm the transaction using Solana's sendAndConfirmTransaction method
+      const signature = await sendAndConfirmTransaction(
+        this.config.connection,
+        createPositionTx,
+        signers,
+        {
+          skipPreflight: false,
+          preflightCommitment: 'confirmed'
+        }
+      );
+      console.log(`Transaction Signature: ${signature}`);
+      console.log(`Position created successfully with signature: ${signature}`);
+      console.log(`Position Public Key: ${positionPubKey.toBase58()}`);
+      console.log('--- createPosition Completed Successfully ---');
+    } catch (error: any) {
+      if (error instanceof SendTransactionError) {
+        console.error('Transaction Logs:', error.logs);
+        console.error('Transaction Error:', error.message);
+        // Optionally, retrieve detailed logs
+        try {
+          const detailedLogs = await error.getLogs(this.config.connection);
+          console.error('Detailed Transaction Logs:', detailedLogs);
+        } catch (logError) {
+          console.error('Failed to retrieve detailed logs:', logError);
+        }
+      } else {
+        console.error('Error creating position:', error.message || error);
+      }
+      console.log('--- createPosition Encountered an Error ---');
+    }
+  }
 }
 
 /**
@@ -297,12 +414,21 @@ export class DLMMClient {
     // Get user positions
     await client.getUserPositions();
 
+    /** 
     // Example Swap Operation
     const swapAmount = new BN(10000);
-    const swapYtoX = true;
-    const allowedSlippageBps = new BN(10); // 0.1% slippage
+    const swapYtoX = false;
+    const allowedSlippageBps = new BN(50); // 0.1% slippage
 
     await client.swapTokens(swapAmount, swapYtoX, allowedSlippageBps);
+
+    */
+
+    // Example Create Position Operation
+    const totalXAmount = new BN(500000); // Adjust as needed
+    const strategyType = StrategyType.SpotBalanced; // Example strategy type as defined in DLMM SDK
+
+    await client.createPosition(totalXAmount, strategyType);
   } catch (error: any) {
     console.error('Error running DLMMClient:', error.message || error);
   }
