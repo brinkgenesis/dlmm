@@ -1,5 +1,5 @@
 import { PublicKey, Connection, sendAndConfirmTransaction, Transaction, Signer, Keypair, TransactionSignature } from '@solana/web3.js';
-import DLMM, { StrategyType, StrategyParameters, LbPosition, SwapQuote } from '@meteora-ag/dlmm';
+import DLMM, { StrategyType, StrategyParameters, LbPosition, SwapQuote, computeBudgetIx } from '@meteora-ag/dlmm';
 import { Config } from '../models/Config';
 import '@coral-xyz/anchor';
 import BN from 'bn.js';
@@ -120,7 +120,7 @@ export class DLMMClient {
         throw new Error('DLMM Pool is not initialized. Call initializeDLMMPool() first.');
       }
 
-      const userPublicKey = new PublicKey(this.config.publickey); // Ensure 'publickey' is correct
+      const userPublicKey = new PublicKey(this.config.publickey); //User Wallet Address
       console.log(`Fetching positions for user: ${userPublicKey.toBase58()}`);
 
       // Fetch user positions using the initialized dlmmPool
@@ -272,8 +272,8 @@ export class DLMMClient {
         inToken: inToken,
         binArraysPubkey: swapQuote.binArraysPubkey,
         inAmount: inAmount,
-        lbPair: this.dlmmPool.pubkey,
-        user: this.config.walletKeypair.publicKey,
+        lbPair: this.dlmmPool.pubkey, //Address of the Liquidity Pair
+        user: this.config.walletKeypair.publicKey, //User Wallet Address
         minOutAmount: swapQuote.minOutAmount,
         outToken: outToken,
       });
@@ -390,7 +390,8 @@ export class DLMMClient {
         signers,
         {
           skipPreflight: false,
-          preflightCommitment: 'confirmed'
+          preflightCommitment: 'confirmed',
+          commitment: 'finalized',
         }
       );
       console.log(`Transaction Signature: ${signature}`);
@@ -636,8 +637,8 @@ export class DLMMClient {
        /** 
     // Example Swap Operation
     const swapAmount = new BN(10000);
-    const swapYtoX = false;
-    const allowedSlippageBps = new BN(50); // 0.1% slippage
+    const swapYtoX = false; //Set logic where if swapping Y to X set true, otherwise false
+    const allowedSlippageBps = new BN(50); // 0.1% slippage, set dynamic slippage based on success rate of transaction
 
     await client.swapTokens(swapAmount, swapYtoX, allowedSlippageBps);
 
@@ -662,8 +663,8 @@ export class DLMMClient {
       console.log('No user positions found to remove liquidity from.');
     } else {
       // Select the position to remove liquidity from
-      // For example, selecting the first position. Modify as needed.
-      const positionToRemove = userPositions[0].publicKey;
+      // For example, selecting the first position. Adjust this to only remove positions for a pair that meet certain conditions. Or remove all positions and recreate
+      const positionToRemove = userPositions[0].publicKey; 
       console.log(`Selected Position for Liquidity Removal: ${positionToRemove.toBase58()}`);
 
       // Remove Liquidity from the selected position

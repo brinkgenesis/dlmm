@@ -49,6 +49,10 @@ Performance Summaries: Provide periodic summaries of position performance and ea
 Performance Metrics: Generate reports on fees collected, IL avoided, and overall performance of the liquidity positions.
 Real-time Analytics: Provide insights on position performance, including fees earned, price movements, and range efficiency.
 Historical Data: Store transaction history and position adjustments for analysis and auditing purposes.
+
+Other items: Needs to calculate potential IL of positions and simulate them for the pool before determining that it is a good opportunity. 
+
+Ex: If we expect both pools to have a delta of 20% within X time period, we need to calculate the amount of IL incured and measure it aganist the potential fees (via volume and volitality) and net expected outcomes in %. We also need to factor in negative market movements. Ex if token A Sol goes down 10%, and memecoin goes down 30% in same time frame. We will take .78% impemenant loss and roughly -20% from the token dropping. If tokens range that is the ideal condition. If the market goes up, we will get more of the base token as a profit taking practice. We can also weight this vs market conditions to come up with EV of three scenarios: market goes up, market ranges, market goes down. The former two are ideal situations, with the latter being non-ideal. 
 ---
 6. Non-Functional Requirements
 6.1. Security
