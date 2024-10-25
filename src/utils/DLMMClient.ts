@@ -379,7 +379,181 @@ export class DLMMClient {
       console.log('--- createPosition Encountered an Error ---');
     }
   }
+
+  /**
+   * Adds liquidity to an existing position within the DLMM pool.
+   * @param positionPubKey - The public key of the liquidity position.
+   * @param totalXAmount - The amount of Token X to add.
+   */
+  async addLiquidity(
+    positionPubKey: PublicKey,
+    totalXAmount: BN
+  ): Promise<void> {
+    try {
+      console.log('--- Initiating addLiquidity ---');
+      console.log(`Position Public Key: ${positionPubKey.toBase58()}`);
+      console.log(`Total X Amount: ${totalXAmount.toString()}`);
+
+      if (!this.dlmmPool) {
+        throw new Error('DLMM Pool is not initialized. Call initializeDLMMPool() first.');
+      }
+
+      // Retrieve active bin information
+      const activeBin = await this.getActiveBin();
+      console.log('Retrieved Active Bin:', activeBin);
+
+      // Calculate min and max bin IDs based on active bin
+      const TOTAL_RANGE_INTERVAL = 10; // 10 bins on each side of the active bin
+      const minBinId = activeBin.binId - TOTAL_RANGE_INTERVAL;
+      const maxBinId = activeBin.binId + TOTAL_RANGE_INTERVAL;
+
+      console.log(`Total Range Interval: ${TOTAL_RANGE_INTERVAL}`);
+      console.log(`Min Bin ID: ${minBinId}`);
+      console.log(`Max Bin ID: ${maxBinId}`);
+
+      // Calculate total Y amount based on active bin price
+      const activeBinPricePerTokenStr = this.dlmmPool.fromPricePerLamport(
+        Number(activeBin.price)
+      );
+      const activeBinPricePerToken = parseFloat(activeBinPricePerTokenStr);
+      
+      const totalYAmount = totalXAmount.mul(new BN(Math.floor(activeBinPricePerToken)));
+      console.log(`Active Bin Price per Token: ${activeBinPricePerToken}`);
+      console.log(`Total Y Amount: ${totalYAmount.toString()}`);
+
+      // Add Liquidity to existing position
+      const addLiquidityTx = await this.dlmmPool.addLiquidityByStrategy({
+        positionPubKey,
+        user: this.config.walletKeypair.publicKey,
+        totalXAmount,
+        totalYAmount,
+        strategy: {
+          minBinId,
+          maxBinId,
+          strategyType: StrategyType.SpotBalanced,
+        },
+      });
+      console.log('Initialized Transaction Instructions');
+
+      // Assign the recent blockhash and fee payer
+      const { blockhash } = await this.config.connection.getLatestBlockhash('finalized');
+      addLiquidityTx.recentBlockhash = blockhash;
+      addLiquidityTx.feePayer = this.config.walletKeypair.publicKey;
+      console.log('Assigned Blockhash and Fee Payer to Transaction');
+
+      // Signers for the transaction: the user
+      const signers: Signer[] = [this.config.walletKeypair];
+      console.log('Assigned Signers:', signers.map((s) => s.publicKey.toBase58()));
+
+      // Send and confirm the transaction
+      console.log('Sending Transaction...');
+      const signature: TransactionSignature = await sendAndConfirmTransaction(
+        this.config.connection,
+        addLiquidityTx,
+        signers,
+        {
+          skipPreflight: false,
+          preflightCommitment: 'confirmed',
+        }
+      );
+      console.log(`Transaction Signature: ${signature}`);
+      console.log(`Liquidity added successfully with signature: ${signature}`);
+      console.log('--- addLiquidity Completed Successfully ---');
+    } catch (error: any) {
+      console.error('Error adding liquidity:', error.message || error);
+      console.log('--- addLiquidity Encountered an Error ---');
+    }
+  }
+
+  /**
+   * Removes liquidity from an existing position within the DLMM pool.
+   * @param newBalancePosition - The user's balance position.
+   */
+  async removeLiquidity(newBalancePosition: PublicKey): Promise<void> {
+    try {
+      console.log('--- Initiating removeLiquidity ---');
+      console.log(`Position Public Key: ${newBalancePosition.toBase58()}`);
+
+      if (!this.dlmmPool) {
+        throw new Error('DLMM Pool is not initialized. Call initializeDLMMPool() first.');
+      }
+
+      // Retrieve user positions
+      const userPositions = await this.getUserPositions();
+      const userPosition = userPositions.find(({ publicKey }) =>
+        publicKey.equals(newBalancePosition)
+      );
+
+      if (!userPosition) {
+        console.log('No positions found for the user.');
+        return;
+      }
+
+      // Extract bin IDs and liquidity BPS to remove
+      const binIdsToRemove = userPosition.positionData.positionBinData.map(
+        (bin) => bin.binId
+      );
+      const liquiditiesBpsToRemove = new Array(binIdsToRemove.length).fill(
+        new BN(10000) // 100% removal (basis points)
+      );
+
+      console.log(`Bin IDs to Remove: ${binIdsToRemove.join(', ')}`);
+      console.log(`Liquidities BPS to Remove: ${liquiditiesBpsToRemove.map(bps => bps.toString()).join(', ')}`);
+      console.log(`Should Claim and Close: true`);
+
+      // Create transaction instructions to remove liquidity
+      const removeLiquidityTxs = await this.dlmmPool.removeLiquidity({
+        position: userPosition.publicKey,
+        user: this.config.walletKeypair.publicKey,
+        binIds: binIdsToRemove,
+        liquiditiesBpsToRemove,
+        shouldClaimAndClose: true,
+      });
+      console.log('Initialized Transaction Instructions');
+
+      // Handle multiple transactions if returned as an array
+      const transactions = Array.isArray(removeLiquidityTxs) ? removeLiquidityTxs : [removeLiquidityTxs];
+      console.log(`Number of Transactions to Send: ${transactions.length}`);
+
+      for (const [index, tx] of transactions.entries()) {
+        console.log(`--- Sending Transaction ${index + 1} of ${transactions.length} ---`);
+
+        // Assign the recent blockhash and fee payer
+        const { blockhash } = await this.config.connection.getLatestBlockhash('finalized');
+        tx.recentBlockhash = blockhash;
+        tx.feePayer = this.config.walletKeypair.publicKey;
+        console.log('Assigned Blockhash and Fee Payer to Transaction');
+
+        // Signers for the transaction: the user
+        const signers: Signer[] = [this.config.walletKeypair];
+        console.log('Assigned Signers:', signers.map((s) => s.publicKey.toBase58()));
+
+        // Send and confirm the transaction
+        console.log(`Sending Transaction ${index + 1}...`);
+        const removeLiquidityTxHash: TransactionSignature = await sendAndConfirmTransaction(
+          this.config.connection,
+          tx,
+          signers,
+          {
+            skipPreflight: false,
+            preflightCommitment: 'confirmed',
+          }
+        );
+        console.log(`Transaction ${index + 1} Signature: ${removeLiquidityTxHash}`);
+        console.log(
+          `Liquidity removed successfully with signature: ${removeLiquidityTxHash}`
+        );
+      }
+
+      console.log('--- removeLiquidity Completed Successfully ---');
+    } catch (error: any) {
+      console.error('Error removing liquidity:', error.message || error);
+      console.log('--- removeLiquidity Encountered an Error ---');
+    }
+  }
+
 }
+
 
 /**
  * Main execution block
