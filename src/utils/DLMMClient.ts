@@ -14,11 +14,42 @@ import { SendTransactionError } from '@solana/web3.js';
  * Represents a user's position.
  */
 interface UserPosition {
-  positionData: {
-    positionBinData: any; // Replace with the actual type
-  };
-  // Add other relevant fields here
-}
+    publicKey: PublicKey;
+    positionData: PositionData;
+    version: PositionVersion;
+  }
+
+interface PositionData {
+    totalXAmount: string;
+    totalYAmount: string;
+    positionBinData: PositionBinData[];
+    lastUpdatedAt: BN;
+    upperBinId: number;
+    lowerBinId: number;
+    feeX: BN;
+    feeY: BN;
+    rewardOne: BN;
+    rewardTwo: BN;
+    feeOwner: PublicKey;
+    totalClaimedFeeXAmount: BN;
+    totalClaimedFeeYAmount: BN;
+  }
+
+interface PositionBinData {
+    binId: number;
+    price: string;
+    pricePerToken: string;
+    binXAmount: string;
+    binYAmount: string;
+    binLiquidity: string;
+    positionLiquidity: string;
+    positionXAmount: string;
+    positionYAmount: string;
+  }
+  
+interface PositionVersion {
+    // Define based on SDK specifications
+  } 
 
 /**
  * DLMMClient is responsible for initializing the Meteora DLMM SDK and retrieving active bins.
@@ -83,7 +114,7 @@ export class DLMMClient {
   /**
    * Retrieves user positions from the initialized DLMM pool.
    */
-  async getUserPositions(): Promise<void> {
+  async getUserPositions(): Promise<UserPosition[]> {
     try {
       if (!this.dlmmPool) {
         throw new Error('DLMM Pool is not initialized. Call initializeDLMMPool() first.');
@@ -97,7 +128,7 @@ export class DLMMClient {
 
       if (!userPositions || userPositions.length === 0) {
         console.log('No positions found for the user.');
-        return;
+        return userPositions;
       }
 
       // Extract and log bin data from each position
@@ -105,9 +136,13 @@ export class DLMMClient {
         const binData = position.positionData.positionBinData;
         console.log(`Position ${index + 1}:`, position);
         console.log(`Bin Data ${index + 1}:`, binData);
+        
       });
+      return userPositions;
+
     } catch (error: any) {
       console.error('Error fetching user positions:', error.message || error);
+      throw error;
     }
   }
 
@@ -433,6 +468,7 @@ export class DLMMClient {
           strategyType: StrategyType.SpotBalanced,
         },
       });
+
       console.log('Initialized Transaction Instructions');
 
       // Assign the recent blockhash and fee payer
@@ -467,7 +503,7 @@ export class DLMMClient {
 
   /**
    * Removes liquidity from an existing position within the DLMM pool.
-   * @param newBalancePosition - The user's balance position.
+   * @param newBalancePosition - The public key of the balance position.
    */
   async removeLiquidity(newBalancePosition: PublicKey): Promise<void> {
     try {
@@ -479,36 +515,41 @@ export class DLMMClient {
       }
 
       // Retrieve user positions
-      const userPositions = await this.getUserPositions();
-      const userPosition = userPositions.find(({ publicKey }) =>
-        publicKey.equals(newBalancePosition)
-      );
+      const userPublicKey = this.config.walletKeypair.publicKey;
+      const { userPositions } = await this.dlmmPool.getPositionsByUserAndLbPair(userPublicKey);
+      console.log('Retrieved User Positions:', userPositions);
+
+      // Find the specific position matching newBalancePosition
+      const userPosition = userPositions.find(({ publicKey }) => publicKey.equals(newBalancePosition));
 
       if (!userPosition) {
-        console.log('No positions found for the user.');
+        console.log('No matching position found for the provided position public key.');
         return;
       }
 
-      // Extract bin IDs and liquidity BPS to remove
-      const binIdsToRemove = userPosition.positionData.positionBinData.map(
+      console.log('Matched User Position:', userPosition);
+
+      // Extract binIds to remove liquidity from
+      const binIdsToRemove: number[] = userPosition.positionData.positionBinData.map(
         (bin) => bin.binId
       );
-      const liquiditiesBpsToRemove = new Array(binIdsToRemove.length).fill(
-        new BN(10000) // 100% removal (basis points)
-      );
+
+      // Define the basis points to remove, e.g., 10000 BPS = 100%
+      const bpsToRemove: BN = new BN(10000);
 
       console.log(`Bin IDs to Remove: ${binIdsToRemove.join(', ')}`);
-      console.log(`Liquidities BPS to Remove: ${liquiditiesBpsToRemove.map(bps => bps.toString()).join(', ')}`);
+      console.log(`Basis Points to Remove: ${bpsToRemove.toString()}`);
       console.log(`Should Claim and Close: true`);
 
       // Create transaction instructions to remove liquidity
       const removeLiquidityTxs = await this.dlmmPool.removeLiquidity({
-        position: userPosition.publicKey,
         user: this.config.walletKeypair.publicKey,
+        position: userPosition.publicKey,
         binIds: binIdsToRemove,
-        liquiditiesBpsToRemove,
+        bps: bpsToRemove,
         shouldClaimAndClose: true,
       });
+
       console.log('Initialized Transaction Instructions');
 
       // Handle multiple transactions if returned as an array
@@ -577,18 +618,22 @@ export class DLMMClient {
 
     // Ensure ATAs are initialized
     await client.ensureATAs();
+    console.log('ATA (Associated Token Accounts) ensured.');
 
     // Check token balances before proceeding
     await client.checkTokenBalances();
+    console.log('Token balances checked.');
 
     // Get the active bin
     const activeBin = await client.getActiveBin();
     console.log('Active Bin:', activeBin);
 
     // Get user positions
-    await client.getUserPositions();
+    const userPositions = await client.getUserPositions();
+    console.log('User Positions:', userPositions);
 
-    /** 
+
+       /** 
     // Example Swap Operation
     const swapAmount = new BN(10000);
     const swapYtoX = false;
@@ -597,12 +642,35 @@ export class DLMMClient {
     await client.swapTokens(swapAmount, swapYtoX, allowedSlippageBps);
 
     */
-
+    // -------------------------------
+    // Commenting Out Create Position
+    // -------------------------------
+    /*
     // Example Create Position Operation
     const totalXAmount = new BN(500000); // Adjust as needed
     const strategyType = StrategyType.SpotBalanced; // Example strategy type as defined in DLMM SDK
 
     await client.createPosition(totalXAmount, strategyType);
+    console.log('Position created successfully.');
+    */
+
+    // ----------------------------------------
+    // Adding Remove Liquidity Functionality
+    // ----------------------------------------
+
+    if (userPositions.length === 0) {
+      console.log('No user positions found to remove liquidity from.');
+    } else {
+      // Select the position to remove liquidity from
+      // For example, selecting the first position. Modify as needed.
+      const positionToRemove = userPositions[0].publicKey;
+      console.log(`Selected Position for Liquidity Removal: ${positionToRemove.toBase58()}`);
+
+      // Remove Liquidity from the selected position
+      await client.removeLiquidity(positionToRemove);
+      console.log('Liquidity removal process initiated.');
+    }
+
   } catch (error: any) {
     console.error('Error running DLMMClient:', error.message || error);
   }
