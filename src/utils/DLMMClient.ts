@@ -8,7 +8,7 @@ import {
   getAccount, 
   createAssociatedTokenAccountInstruction 
 } from '@solana/spl-token';
-import { SendTransactionError } from '@solana/web3.js';
+import { SendTransactionError, ComputeBudgetProgram } from '@solana/web3.js';
 
 /**
  * Represents a user's position.
@@ -278,11 +278,32 @@ export class DLMMClient {
         outToken: outToken,
       });
 
+      // Attach Compute Budget Instructions for Priority Fees
+      swapTx.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 300000 }),
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 })
+    );
+
+    // Assign the recent blockhash and fee payer
+      const { blockhash } = await this.config.connection.getLatestBlockhash('finalized');
+      swapTx.recentBlockhash = blockhash;
+      swapTx.feePayer = this.config.walletKeypair.publicKey;
+      console.log('Assigned Blockhash and Fee Payer to Transaction');
+
+    // Signers for the transaction: the user
+      const signers: Signer[] = [this.config.walletKeypair];
+
       // Send and confirm the transaction
       const swapTxHash = await sendAndConfirmTransaction(
         this.config.connection,
         swapTx,
-        [this.config.walletKeypair]
+        [this.config.walletKeypair],
+        {
+          skipPreflight: false,
+          preflightCommitment: 'finalized', // Higher commitment level
+          commitment: 'finalized', // Ensure transaction is finalized
+          maxRetries: 3, // Retry up to 3 times
+        }
       );
       console.log('Swap Transaction Hash:', swapTxHash);
     } catch (error: any) {
@@ -383,6 +404,11 @@ export class DLMMClient {
       // Signers for the transaction: the user and the new position keypair
       const signers: Signer[] = [this.config.walletKeypair, positionKeypair];
 
+      createPositionTx.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 300 }),
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 20000 })
+      );
+
       // Send and confirm the transaction using Solana's sendAndConfirmTransaction method
       const signature = await sendAndConfirmTransaction(
         this.config.connection,
@@ -390,8 +416,9 @@ export class DLMMClient {
         signers,
         {
           skipPreflight: false,
-          preflightCommitment: 'confirmed',
-          commitment: 'finalized',
+          preflightCommitment: 'finalized', // Higher commitment level
+          commitment: 'finalized', // Ensure transaction is finalized
+          maxRetries: 3, // Retry up to 3 times
         }
       );
       console.log(`Transaction Signature: ${signature}`);
@@ -472,6 +499,8 @@ export class DLMMClient {
 
       console.log('Initialized Transaction Instructions');
 
+
+
       // Assign the recent blockhash and fee payer
       const { blockhash } = await this.config.connection.getLatestBlockhash('finalized');
       addLiquidityTx.recentBlockhash = blockhash;
@@ -482,6 +511,12 @@ export class DLMMClient {
       const signers: Signer[] = [this.config.walletKeypair];
       console.log('Assigned Signers:', signers.map((s) => s.publicKey.toBase58()));
 
+      // Attach Compute Budget Instruction for Priority Fees
+      addLiquidityTx.add(
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 300 }),
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 20000 })
+      );
+
       // Send and confirm the transaction
       console.log('Sending Transaction...');
       const signature: TransactionSignature = await sendAndConfirmTransaction(
@@ -490,10 +525,11 @@ export class DLMMClient {
         signers,
         {
           skipPreflight: false,
-          preflightCommitment: 'confirmed',
+          preflightCommitment: 'finalized', // Higher commitment level
+          commitment: 'finalized', // Ensure transaction is finalized
+          maxRetries: 3,
         }
       );
-      console.log(`Transaction Signature: ${signature}`);
       console.log(`Liquidity added successfully with signature: ${signature}`);
       console.log('--- addLiquidity Completed Successfully ---');
     } catch (error: any) {
@@ -539,8 +575,8 @@ export class DLMMClient {
       const bpsToRemove: BN = new BN(10000);
 
       console.log(`Bin IDs to Remove: ${binIdsToRemove.join(', ')}`);
-      console.log(`Basis Points to Remove: ${bpsToRemove.toString()}`);
-      console.log(`Should Claim and Close: true`);
+      //console.log(`Basis Points to Remove: ${bpsToRemove.toString()}`);
+      //console.log(`Should Claim and Close: true`);
 
       // Create transaction instructions to remove liquidity
       const removeLiquidityTxs = await this.dlmmPool.removeLiquidity({
@@ -560,6 +596,12 @@ export class DLMMClient {
       for (const [index, tx] of transactions.entries()) {
         console.log(`--- Sending Transaction ${index + 1} of ${transactions.length} ---`);
 
+        // Attach Compute Budget Instructions for Priority Fees
+      tx.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 300 }),
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 20000 })
+      );
+
         // Assign the recent blockhash and fee payer
         const { blockhash } = await this.config.connection.getLatestBlockhash('finalized');
         tx.recentBlockhash = blockhash;
@@ -578,13 +620,13 @@ export class DLMMClient {
           signers,
           {
             skipPreflight: false,
-            preflightCommitment: 'confirmed',
+            preflightCommitment: 'finalized', // Higher commitment level
+            commitment: 'finalized', // Ensure transaction is finalized
+            maxRetries: 3,
           }
         );
         console.log(`Transaction ${index + 1} Signature: ${removeLiquidityTxHash}`);
-        console.log(
-          `Liquidity removed successfully with signature: ${removeLiquidityTxHash}`
-        );
+        
       }
 
       console.log('--- removeLiquidity Completed Successfully ---');
