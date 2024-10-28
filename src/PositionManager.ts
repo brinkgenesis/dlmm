@@ -2,6 +2,7 @@ import { PublicKey } from '@solana/web3.js';
 import { DLMMClient } from './utils/DLMMClient';
 import { Config } from './models/Config';
 import BN from 'bn.js';
+import { PositionStorage } from './utils/PositionStorage';
 
 /**
  * PositionManager is responsible for managing liquidity positions based on market conditions.
@@ -9,15 +10,18 @@ import BN from 'bn.js';
 export class PositionManager {
   private client: DLMMClient;
   private config: Config;
+  private positionStorage: PositionStorage;
 
   /**
    * Constructs a new PositionManager instance.
    * @param client - An instance of DLMMClient.
    * @param config - The configuration object containing necessary settings.
+   * @param positionStorage - An instance of PositionStorage.
    */
-  constructor(client: DLMMClient, config: Config) {
+  constructor(client: DLMMClient, config: Config, positionStorage: PositionStorage) {
     this.client = client;
     this.config = config;
+    this.positionStorage = positionStorage;
   }
 
   /**
@@ -33,40 +37,50 @@ export class PositionManager {
         return;
       }
 
-      // Retrieve current active bin
-      const activeBinInfo = await this.client.getActiveBin();
-      const activeBinId = activeBinInfo.binId;
-
-      console.log(`Current Active Bin ID: ${activeBinId}`);
+      console.log(`Managing ${userPositions.length} positions.`);
 
       for (const position of userPositions) {
-        // Use the correct property name 'publicKey'
         const positionPubKey: PublicKey = position.publicKey;
         const positionData = position.positionData;
 
-        // Define original active bin (assuming it's stored or can be derived)
-        const originalActiveBin = activeBinId; // This might need to be stored separately if it changes
+        // Retrieve stored bin ranges
+        const storedRange = this.positionStorage.getPositionRange(positionPubKey);
 
-        // Define position's bin range
-        const TOTAL_RANGE_INTERVAL = 10;
-        const minBinRange = originalActiveBin - TOTAL_RANGE_INTERVAL;
-        const maxBinRange = originalActiveBin + TOTAL_RANGE_INTERVAL;
+        if (!storedRange) {
+          console.warn(`No stored bin range for position ${positionPubKey.toBase58()}. Skipping management.`);
+          continue;
+        }
 
-        // Determine current bin using position data
-        const currentBin = this.getCurrentBin(positionData);
+        const { originalActiveBin, minBinRange, maxBinRange } = storedRange;
 
-        console.log(`Position ${positionPubKey.toBase58()} - Current Bin: ${currentBin}`);
+        // Determine current active bin from the latest market data
+        const currentActiveBinInfo = await this.client.getActiveBin();
+        const currentActiveBinId = currentActiveBinInfo.binId;
 
-        // Check if the current bin is +/-6 from original active bin or within 4 bins of either end
-        if (
-          currentBin <= originalActiveBin - 6 ||
-          currentBin >= originalActiveBin + 6 ||
-          currentBin <= minBinRange + 4 ||
-          currentBin >= maxBinRange - 4
-        ) {
+        // Optionally, you can update min and max bin ranges if needed
+        // For this example, we'll keep them static based on the original active bin
+
+        console.log(`Position: ${positionPubKey.toBase58()}`);
+        console.log(`Original Active Bin: ${originalActiveBin}`);
+        console.log(`Min Bin Range: ${minBinRange}`);
+        console.log(`Max Bin Range: ${maxBinRange}`);
+        console.log(`Current Active Bin: ${currentActiveBinId}`);
+
+        // Determine if currentActiveBinId has moved sufficiently to warrant liquidity removal
+        const shouldRemoveLiquidity =
+          currentActiveBinId <= originalActiveBin - 6 ||
+          currentActiveBinId >= originalActiveBin + 6 ||
+          currentActiveBinId <= minBinRange + 4 ||
+          currentActiveBinId >= maxBinRange - 4;
+
+        if (shouldRemoveLiquidity) {
           console.log(`Criteria met for removing liquidity from position: ${positionPubKey.toBase58()}`);
           await this.client.removeLiquidity(positionPubKey);
           console.log(`Liquidity removal initiated for position: ${positionPubKey.toBase58()}`);
+
+          // Optionally, remove the position from storage if it's closed
+          this.positionStorage.removePosition(positionPubKey);
+          console.log(`Position ${positionPubKey.toBase58()} removed from storage.`);
         } else {
           console.log(`No action required for position: ${positionPubKey.toBase58()}`);
         }
@@ -74,24 +88,5 @@ export class PositionManager {
     } catch (error: any) {
       console.error('Error managing positions:', error.message || error);
     }
-  }
-
-  /**
-   * Determines the current bin based on position data.
-   * @param positionData - The data of the user position.
-   * @returns The current bin ID.
-   */
-  private getCurrentBin(positionData: any): number {
-    // Implement logic to determine the current bin based on positionData
-    // This is a placeholder and should be replaced with actual computation
-    // For example, based on price movements or other criteria
-
-    // Example logic (to be customized):
-    // Calculate the average bin based on position's bin data
-    const bins = positionData.positionBinData;
-    const binIds = bins.map((bin: any) => bin.binId);
-    const averageBin = binIds.reduce((a: number, b: number) => a + b, 0) / binIds.length;
-
-    return Math.round(averageBin);
   }
 }
