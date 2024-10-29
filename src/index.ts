@@ -5,13 +5,14 @@ import { PublicKey } from '@solana/web3.js';
 import { PositionStorage } from './utils/PositionStorage';
 import BN from 'bn.js';
 import DLMM, { StrategyType } from '@meteora-ag/dlmm';
+import { formatBN } from './utils/formatBN';
 
 /**
  * Main execution block
  */
 (async () => {
   try {
-    // Load your configuration
+    // Load your configuration (Singleton)
     const config = Config.load();
     console.log('Configuration loaded successfully.');
 
@@ -28,11 +29,11 @@ import DLMM, { StrategyType } from '@meteora-ag/dlmm';
 
     // Initialize PositionStorage
     const positionStorage = new PositionStorage();
+    console.log('PositionStorage instance created.');
 
     // Example: Creating a new position
     const totalXAmount = new BN(10000); // Replace with actual amount
     const strategyType = StrategyType.SpotBalanced; // SpotBalanced Strategy default
-
 
     // Create the position and retrieve its PublicKey
     const positionPubKey: PublicKey = await client.createPosition(totalXAmount, strategyType);

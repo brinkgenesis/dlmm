@@ -1,4 +1,4 @@
-import { PublicKey, Connection, sendAndConfirmTransaction, Transaction, Signer, Keypair, TransactionSignature } from '@solana/web3.js';
+import { PublicKey, Connection, sendAndConfirmTransaction, Transaction, Signer, Keypair, TransactionSignature, ComputeBudgetProgram } from '@solana/web3.js';
 import DLMM, { StrategyType, StrategyParameters, LbPosition, SwapQuote, computeBudgetIx } from '@meteora-ag/dlmm';
 import { Config } from '../models/Config';
 import '@coral-xyz/anchor';
@@ -9,6 +9,7 @@ import {
   createAssociatedTokenAccountInstruction 
 } from '@solana/spl-token';
 import { SendTransactionError } from '@solana/web3.js';
+import { formatBN } from './formatBN';
 
 /**
  * Represents a user's position.
@@ -93,7 +94,7 @@ export class DLMMClient {
       }
 
       const activeBin = await this.dlmmPool.getActiveBin();
-      console.log('Active Bin:', activeBin);
+      console.log('Active Bin:', formatBN(activeBin));
 
       const activeBinPriceLamport = activeBin.price;
       const activeBinPricePerToken = this.dlmmPool.fromPricePerLamport(Number(activeBin.price));
@@ -318,7 +319,7 @@ export class DLMMClient {
 
       // Retrieve active bin information
       const { activeBin } = await this.dlmmPool.getPositionsByUserAndLbPair(this.config.walletKeypair.publicKey);
-      console.log('Retrieved Active Bin:', activeBin);
+      console.log('Retrieved Active Bin:', formatBN(activeBin));
 
       if (!activeBin) {
         throw new Error('Active bin not found. Ensure the pool has active bins.');
@@ -380,8 +381,17 @@ export class DLMMClient {
         strategy,
       });
 
+
       // Signers for the transaction: the user and the new position keypair
       const signers: Signer[] = [this.config.walletKeypair, positionKeypair];
+
+      // **Debugging: Log Instructions**
+      console.log('Transaction Instructions:', createPositionTx.instructions.map((ix, idx) => ({
+        index: idx,
+        programId: ix.programId.toBase58(),
+        dataLength: ix.data.length,
+        keys: ix.keys.map(key => key.pubkey.toBase58()),
+      })));
 
       // Send and confirm the transaction using Solana's sendAndConfirmTransaction method
       const signature = await sendAndConfirmTransaction(
@@ -474,6 +484,7 @@ export class DLMMClient {
           strategyType: StrategyType.SpotBalanced,
         },
       });
+
 
       console.log('Initialized Transaction Instructions');
 
@@ -571,6 +582,7 @@ export class DLMMClient {
         tx.feePayer = this.config.walletKeypair.publicKey;
         console.log('Assigned Blockhash and Fee Payer to Transaction');
 
+
         // Signers for the transaction: the user
         const signers: Signer[] = [this.config.walletKeypair];
         console.log('Assigned Signers:', signers.map((s) => s.publicKey.toBase58()));
@@ -601,10 +613,9 @@ export class DLMMClient {
 
 }
 
-
 /**
  * Main execution block
- */
+
 (async () => {
   try {
     // Load your configuration
@@ -664,6 +675,7 @@ export class DLMMClient {
     // Adding Remove Liquidity Functionality
     // ----------------------------------------
 
+    /** 
     if (userPositions.length === 0) {
       console.log('No user positions found to remove liquidity from.');
     } else {
@@ -681,3 +693,15 @@ export class DLMMClient {
     console.error('Error running DLMMClient:', error.message || error);
   }
 })();
+ */
+
+// Conditional IIFE
+if (require.main === module) {
+  (async () => {
+    const config = Config.load();
+    const client = new DLMMClient(config);
+    console.log('DLMMClient instance created from DLMMClient.ts directly.');
+    // ... other initialization logic ...
+  })();
+}
+
