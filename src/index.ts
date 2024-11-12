@@ -6,6 +6,7 @@ import { PositionStorage } from './utils/PositionStorage';
 import BN from 'bn.js';
 import DLMM, { StrategyType } from '@meteora-ag/dlmm';
 import { formatBN } from './utils/formatBN';
+import { RiskManager } from './RiskManager';
 
 /**
  * Main execution block
@@ -30,6 +31,24 @@ import { formatBN } from './utils/formatBN';
     // Initialize PositionStorage
     const positionStorage = new PositionStorage();
     console.log('PositionStorage instance created.');
+
+    //Risk Managerment Logic here
+    
+    // Prompt user to select a risk case
+    const priceSpread = await RiskManager.promptUserForRiskCase();
+
+    // Assume you get the current price of the token pair from an API or other source
+    const currentPrice = /* Fetch current price */ 100; // Example current price
+
+    // Calculate bin parameters based on the selected risk case
+    const { lowerPrice, upperPrice } = RiskManager.calculateBinParameters(currentPrice, priceSpread);
+
+    console.log(`Calculated Bin Parameters:`);
+    console.log(`Lower Price: $${lowerPrice.toFixed(2)}`);
+    console.log(`Upper Price: $${upperPrice.toFixed(2)}`);
+
+    // Proceed with execution logic using the bin parameters
+
 
     // Example: Creating a new position
     const totalXAmount = new BN(10000); // Replace with actual amount

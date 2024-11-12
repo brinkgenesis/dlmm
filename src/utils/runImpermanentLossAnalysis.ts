@@ -14,8 +14,8 @@ const newPriceB = 270; // New price of Asset B after the period (e.g., $270)
 const period: '1d' | '7d' | '1m' = '1m'; // Analysis period
 
 // Define Uniswap v3 range
-const tL = 80;  // Lower bound of price range
-const tH = 120; // Upper bound of price range
+const tL = 90;  // Lower bound of price range
+const tH = 100; // Upper bound of price range
 
 // Calculate range factor
 const rangeFactor = Math.sqrt(tH / tL);
