@@ -31,3 +31,17 @@ Convert to number of bins by figuring out the amount of bins and the use
 Have the monitoring logic determine to keep or exit the position. Loop logic.
 Use voilitily measure to determine EV of holding the position vs breaking it. 
 If a position is set for rebalance, then liquidity is withdrawn, swapping enough of excess token A to B and vice versa. Determining the new price range. And re-entering the position. Add this to PositionManager.
+
+
+Select token pair
+
+Determine current token price
+
+Select risk level
+
+Calculate upper and loweer bounds for price range
+
+Convert price range into bins
+- determine the bin step increment to price
+- divide price by the bin step to determine # of bins to right and left. 
+- use the upper and lower bin numbers to set the price range. 

@@ -49,8 +49,27 @@ import { RiskManager } from './RiskManager';
 
     // Proceed with execution logic using the bin parameters
 
+     // Step 4: Calculate bin IDs using RiskManager
+    const { lowerBinId, upperBinId } = RiskManager.calculateBinIds(lowerPrice, upperPrice, client);
 
-    // Example: Creating a new position
+      console.log(`Calculated Bin IDs:`);
+      console.log(`Lower Bin ID: ${lowerBinId}`);
+      console.log(`Upper Bin ID: ${upperBinId}`);
+    
+        // Proceed with execution logic using the bin IDs
+    
+        // Define strategy parameters
+    const strategyParameters: StrategyParameters = {
+          minBinId: lowerBinId,
+          maxBinId: upperBinId,
+          strategyType: 'spotBalanced', // Replace with desired strategy type
+          singleSidedX: false, // Set bas ed on your strategy
+        };
+    
+
+    // Proceed with execution logic using the bin IDs
+
+    // Creating a new position
     const totalXAmount = new BN(10000); // Replace with actual amount
     const strategyType = StrategyType.SpotBalanced; // SpotBalanced Strategy default
 

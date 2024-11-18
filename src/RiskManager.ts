@@ -3,6 +3,8 @@
  */
 
 import readline from 'readline';
+import DLMM from '@meteora-ag/dlmm';
+import { DLMMClient } from './utils/DLMMClient';
 
 /**
  * Represents a price spread with upper and lower percentage bounds.
@@ -97,5 +99,24 @@ export class RiskManager {
     const upperPrice = currentPrice * (1 + priceSpread.upperPercentage);
 
     return { lowerPrice, upperPrice };
+  }
+
+  /**
+   * Calculates the bin IDs based on the price range and DLMM parameters.
+   * @param lowerPrice The lower bound price.
+   * @param upperPrice The upper bound price.
+   * @param dlmmClient An instance of DLMMClient to access DLMM parameters.
+   * @returns An object containing the lower and upper bin IDs.
+   */
+  public static calculateBinIds(
+    lowerPrice: number,
+    upperPrice: number,
+    dlmmClient: DLMMClient
+  ): { lowerBinId: number; upperBinId: number } {
+    const binStep = dlmmClient.lbPair.binStep;
+    const lowerBinId = DLMM.getBinIdFromPrice(lowerPrice, binStep, true);
+    const upperBinId = DLMM.getBinIdFromPrice(upperPrice, binStep, false);
+
+    return { lowerBinId, upperBinId };
   }
 }
