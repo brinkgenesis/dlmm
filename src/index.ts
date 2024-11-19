@@ -4,7 +4,7 @@ import { PositionManager } from './PositionManager';
 import { PublicKey } from '@solana/web3.js';
 import { PositionStorage } from './utils/PositionStorage';
 import BN from 'bn.js';
-import DLMM, { StrategyType } from '@meteora-ag/dlmm';
+import DLMM, { StrategyType, StrategyParameters } from '@meteora-ag/dlmm';
 import { formatBN } from './utils/formatBN';
 import { RiskManager } from './RiskManager';
 
@@ -28,12 +28,14 @@ import { RiskManager } from './RiskManager';
     await client.initializeDLMMPool(poolPublicKey);
     console.log('DLMM Pool initialized.');
 
+    // Get binStep using the new method
+    const binStep = client.getBinStep();
+    console.log(`Fetched binStep: ${binStep}`);
+
     // Initialize PositionStorage
     const positionStorage = new PositionStorage();
     console.log('PositionStorage instance created.');
 
-    //Risk Managerment Logic here
-    
     // Prompt user to select a risk case
     const priceSpread = await RiskManager.promptUserForRiskCase();
 
@@ -47,34 +49,30 @@ import { RiskManager } from './RiskManager';
     console.log(`Lower Price: $${lowerPrice.toFixed(2)}`);
     console.log(`Upper Price: $${upperPrice.toFixed(2)}`);
 
-    // Proceed with execution logic using the bin parameters
+    // Calculate bin IDs using RiskManager and the fetched binStep
+    const { lowerBinId, upperBinId } = RiskManager.calculateBinIds(lowerPrice, upperPrice, binStep);
 
-     // Step 4: Calculate bin IDs using RiskManager
-    const { lowerBinId, upperBinId } = RiskManager.calculateBinIds(lowerPrice, upperPrice, client);
-
-      console.log(`Calculated Bin IDs:`);
-      console.log(`Lower Bin ID: ${lowerBinId}`);
-      console.log(`Upper Bin ID: ${upperBinId}`);
-    
-        // Proceed with execution logic using the bin IDs
-    
-        // Define strategy parameters
-    const strategyParameters: StrategyParameters = {
-          minBinId: lowerBinId,
-          maxBinId: upperBinId,
-          strategyType: 'spotBalanced', // Replace with desired strategy type
-          singleSidedX: false, // Set bas ed on your strategy
-        };
-    
+    console.log(`Calculated Bin IDs:`);
+    console.log(`Lower Bin ID: ${lowerBinId}`);
+    console.log(`Upper Bin ID: ${upperBinId}`);
 
     // Proceed with execution logic using the bin IDs
+    
+    // Define strategy parameters
+    const strategy: StrategyParameters = {
+      minBinId: lowerBinId,
+      maxBinId: upperBinId,
+      strategyType: StrategyType.SpotBalanced, // Use the enum value
+      singleSidedX: false, // Set based on your strategy
+    };
+   
 
     // Creating a new position
     const totalXAmount = new BN(10000); // Replace with actual amount
-    const strategyType = StrategyType.SpotBalanced; // SpotBalanced Strategy default
+    const strategyType = StrategyType.SpotBalanced; // Ensure this uses the enum
 
     // Create the position and retrieve its PublicKey
-    const positionPubKey: PublicKey = await client.createPosition(totalXAmount, strategyType);
+    const positionPubKey: PublicKey = await client.createPosition(totalXAmount, strategyType, strategy); // Pass `strategy` here
     console.log(`Position created with Public Key: ${positionPubKey.toBase58()}`);
 
     // Retrieve the Active Bin after position creation

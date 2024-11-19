@@ -301,102 +301,55 @@ export class DLMMClient {
   /**
    * Creates a new liquidity position within the DLMM pool.
    * @param totalXAmount - The total amount of Token X to add to the liquidity pool.
-   * @param strategyType - The strategy type to use for adding liquidity (as defined in the DLMM SDK).
-   * @returns
+   * @param strategyType - The strategy type to use for adding liquidity.
+   * @param strategy - (Optional) Strategy parameters including minBinId and maxBinId.
+   * @returns The public key of the created position.
    */
-  async createPosition(
+  public async createPosition(
     totalXAmount: BN,
     strategyType: StrategyType,
+    strategy: StrategyParameters
   ): Promise<PublicKey> {
+    if (!this.dlmmPool) {
+      throw new Error('DLMM Pool is not initialized. Call initializeDLMMPool() first.');
+    }
+
     try {
       console.log('--- Initiating createPosition ---');
       console.log(`Strategy Type: ${StrategyType[strategyType]}`);
 
-
-      if (!this.dlmmPool) {
-        throw new Error('DLMM Pool is not initialized. Call initializeDLMMPool() first.');
-      }
-
-      // Retrieve active bin information
-      const { activeBin } = await this.dlmmPool.getPositionsByUserAndLbPair(this.config.walletKeypair.publicKey);
-      console.log('Retrieved Active Bin:', formatBN(activeBin));
-
-      if (!activeBin) {
-        throw new Error('Active bin not found. Ensure the pool has active bins.');
-      }
-
-      // Calculate min and max bin IDs based on active bin
-      const TOTAL_RANGE_INTERVAL = 10; // 10 bins on each side of the active bin
-      const minBinId = activeBin.binId - TOTAL_RANGE_INTERVAL;
-      const maxBinId = activeBin.binId + TOTAL_RANGE_INTERVAL;
-
-      // Validate bin IDs against DLMM SDK constraints (if any)
-      // Example:
-      // const MIN_BIN_ID = -443636;
-      // const MAX_BIN_ID = 443636;
-      // if (minBinId < MIN_BIN_ID || maxBinId > MAX_BIN_ID) {
-      //   throw new Error(`Bin IDs must be between ${MIN_BIN_ID} and ${MAX_BIN_ID}.`);
-      // }
-
-      // Convert price per lamport to real price
-      const activeBinPricePerTokenStr = this.dlmmPool.fromPricePerLamport(Number(activeBin.price));
-      console.log(`Active Bin Price per Token (String): ${activeBinPricePerTokenStr}`);
-
-      const activeBinPricePerToken = parseFloat(activeBinPricePerTokenStr);
-      console.log(`Active Bin Price per Token (Number): ${activeBinPricePerToken}`);
-
-      // Calculate totalYAmount based on activeBinPricePerToken
-      const totalYAmount = totalXAmount.mul(new BN(Math.floor(activeBinPricePerToken)));
-
-      console.log(`Total Bin Spread: ${TOTAL_RANGE_INTERVAL}`);
-      console.log(`Smallest Bin ID: ${minBinId}`);
-      console.log(`Largest Bin ID: ${maxBinId}`);
-      console.log(`Total Token X Size: ${totalXAmount.toString()}`);
-      console.log(`Total Token Y Size: ${totalYAmount.toString()}`);
-
-      // Generate a new Keypair for the position
+      // Generate new Keypair for the position
       const positionKeypair = Keypair.generate();
       const positionPubKey = positionKeypair.publicKey;
-      console.log(`Generated Position Keypair: ${positionPubKey.toBase58()}`);
 
-      // Define the strategy parameters as per DLMM SDK documentation
-      const strategy: StrategyParameters = {
-        minBinId,
-        maxBinId,
-        strategyType,
-        // singleSidedX: false, // Optional: Uncomment and set if needed
-      };
-      console.log('Strategy Parameters:', strategy);
+      // Fetch Active Bin Info
+      const activeBin = await this.getActiveBin();
 
-      // Fetch the latest blockhash
-      const { blockhash } = await this.config.connection.getLatestBlockhash('finalized');
-      console.log(`Fetched Latest Blockhash: ${blockhash}`);
+      // Calculate total Y amount based on active bin price
+      const activeBinPricePerTokenStr = this.dlmmPool.fromPricePerLamport(Number(activeBin.price));
+      const activeBinPricePerToken = parseFloat(activeBinPricePerTokenStr);
 
-      // Prepare the transaction using the DLMM SDK's initializePositionAndAddLiquidityByStrategy method
-      const createPositionTx = await this.dlmmPool.initializePositionAndAddLiquidityByStrategy({
-        positionPubKey,
+      const totalYAmount = totalXAmount.mul(new BN(Math.floor(activeBinPricePerToken)));
+      console.log(`Active Bin Price per Token: ${activeBinPricePerToken}`);
+      console.log(`Total Y Amount: ${totalYAmount.toString()}`);
+
+      // Use the strategy parameters provided
+      console.log('Creating position with custom strategy parameters.');
+      const transaction = await this.dlmmPool.initializePositionAndAddLiquidityByStrategy({
+        positionPubKey: positionPubKey,
+        totalXAmount: totalXAmount,
+        totalYAmount: totalYAmount,
+        strategy: strategy,
         user: this.config.walletKeypair.publicKey,
-        totalXAmount,
-        totalYAmount,
-        strategy,
       });
 
-
-      // Signers for the transaction: the user and the new position keypair
+      // Signers for the transaction
       const signers: Signer[] = [this.config.walletKeypair, positionKeypair];
 
-      // **Debugging: Log Instructions**
-      console.log('Transaction Instructions:', createPositionTx.instructions.map((ix, idx) => ({
-        index: idx,
-        programId: ix.programId.toBase58(),
-        dataLength: ix.data.length,
-        keys: ix.keys.map(key => key.pubkey.toBase58()),
-      })));
-
-      // Send and confirm the transaction using Solana's sendAndConfirmTransaction method
+      // Send and confirm the transaction
       const signature = await sendAndConfirmTransaction(
         this.config.connection,
-        createPositionTx,
+        transaction,
         signers,
         {
           skipPreflight: false,
@@ -407,26 +360,10 @@ export class DLMMClient {
       console.log(`Transaction Signature: ${signature}`);
       console.log(`Position created successfully with signature: ${signature}`);
       console.log(`Position Public Key: ${positionPubKey.toBase58()}`);
-      console.log('--- createPosition Completed Successfully ---');
 
-      // Return the positionPubKey upon successful creation
       return positionPubKey;
     } catch (error: any) {
-      if (error instanceof SendTransactionError) {
-        console.error('Transaction Logs:', error.logs);
-        console.error('Transaction Error:', error.message);
-        // Optionally, retrieve detailed logs
-        try {
-          const detailedLogs = await error.getLogs(this.config.connection);
-          console.error('Detailed Transaction Logs:', detailedLogs);
-        } catch (logError) {
-          console.error('Failed to retrieve detailed logs:', logError);
-        }
-      } else {
-        console.error('Error creating position:', error.message || error);
-      }
-      console.log('--- createPosition Encountered an Error ---');
-      // Re-throw the error to ensure the caller is aware of the failure
+      console.error('Error creating position:', error.message || error);
       throw error;
     }
   }
@@ -609,6 +546,20 @@ export class DLMMClient {
       console.error('Error removing liquidity:', error.message || error);
       console.log('--- removeLiquidity Encountered an Error ---');
     }
+  }
+
+  /**
+   * Returns the binStep of the DLMM pool.
+   * @returns The binStep as a number.
+   */
+  public getBinStep(): number {
+    if (!this.dlmmPool) {
+      throw new Error('DLMM Pool is not initialized.');
+    }
+
+    // Even if lbPair is not exposed, dlmmPool might have a method or property to get binStep
+    const binStepBN = (this.dlmmPool as any).lbPair.binStep; // Use 'as any' if TypeScript complains
+    return binStepBN.toNumber();
   }
 
 }
