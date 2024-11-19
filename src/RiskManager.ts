@@ -17,9 +17,9 @@ interface PriceSpread {
  * Enum for the different risk cases.
  */
 enum RiskCase {
-  High = 'High Risk (+5% / -5%)',
+  High = 'High Risk (+15% / -15%)',
   Medium = 'Medium Risk (+10% / -10%)',
-  Low = 'Low Risk (+15% / -15%)',
+  Low = 'Low Risk (+5% / -5%)',
 }
 
 /**
@@ -30,9 +30,9 @@ export class RiskManager {
    * Map of risk cases to their corresponding price spreads.
    */
   private static riskCases: { [key: string]: PriceSpread } = {
-    High: { upperPercentage: 0.05, lowerPercentage: 0.05 },
+    High: { upperPercentage: 0.15, lowerPercentage: 0.15 },
     Medium: { upperPercentage: 0.10, lowerPercentage: 0.10 },
-    Low: { upperPercentage: 0.15, lowerPercentage: 0.15 },
+    Low: { upperPercentage: 0.05, lowerPercentage: 0.05 },
   };
 
   /**
@@ -52,7 +52,7 @@ export class RiskManager {
         console.log(`${index + 1}. ${option}`);
       });
 
-      rl.question('\nEnter the number corresponding to your choice: ', (answer) => {
+      rl.question('\nEnter the number corresponding to your choice: (1,2, or 3) ', (answer) => {
         const choice = parseInt(answer.trim(), 10);
         if (choice >= 1 && choice <= options.length) {
           const selectedRisk = options[choice - 1];

@@ -87,7 +87,7 @@ export class DLMMClient {
    * Retrieves the active bin from the initialized DLMM pool.
    * @returns The active bin details.
    */
-  async getActiveBin(): Promise<{ binId: number; price: string }> {
+  async getActiveBin(): Promise<{ binId: number; price: number }> {
     try {
       if (!this.dlmmPool) {
         throw new Error('DLMM Pool is not initialized. Call initializeDLMMPool() first.');
@@ -97,14 +97,14 @@ export class DLMMClient {
       console.log('Active Bin:', formatBN(activeBin));
 
       const activeBinPriceLamport = activeBin.price;
-      const activeBinPricePerToken = this.dlmmPool.fromPricePerLamport(Number(activeBin.price));
+      const activeBinPricePerToken = Number(this.dlmmPool.fromPricePerLamport(Number(activeBin.price)));
 
       console.log(`Active Bin Price (Lamport): ${activeBinPriceLamport}`);
       console.log(`Active Bin Price per Token: ${activeBinPricePerToken}`);
 
       return {
         binId: activeBin.binId,
-        price: activeBinPricePerToken.toString(),
+        price: activeBinPricePerToken,
       };
     } catch (error: any) {
       console.error('Error retrieving active bin:', error.message || error);
@@ -559,7 +559,8 @@ export class DLMMClient {
 
     // Even if lbPair is not exposed, dlmmPool might have a method or property to get binStep
     const binStepBN = (this.dlmmPool as any).lbPair.binStep; // Use 'as any' if TypeScript complains
-    return binStepBN.toNumber();
+    console.log(`Bin Step: ${binStepBN}`);
+    return binStepBN;
   }
 
 }

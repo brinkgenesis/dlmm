@@ -28,6 +28,14 @@ import { RiskManager } from './RiskManager';
     await client.initializeDLMMPool(poolPublicKey);
     console.log('DLMM Pool initialized.');
 
+    // Get the active bin
+    const activeBin = await client.getActiveBin();
+    console.log('Active Bin:', activeBin);
+
+    // Assume you get the current price of the token pair from an API or other source
+    const currentPrice = activeBin.price;
+    console.log(`Fetched Price: ${currentPrice}`);
+
     // Get binStep using the new method
     const binStep = client.getBinStep();
     console.log(`Fetched binStep: ${binStep}`);
@@ -39,9 +47,7 @@ import { RiskManager } from './RiskManager';
     // Prompt user to select a risk case
     const priceSpread = await RiskManager.promptUserForRiskCase();
 
-    // Assume you get the current price of the token pair from an API or other source
-    const currentPrice = /* Fetch current price */ 100; // Example current price
-
+    
     // Calculate bin parameters based on the selected risk case
     const { lowerPrice, upperPrice } = RiskManager.calculateBinParameters(currentPrice, priceSpread);
 
