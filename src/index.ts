@@ -74,29 +74,18 @@ import { RiskManager } from './RiskManager';
    
 
     // Creating a new position
-    const totalXAmount = new BN(10000); // Replace with actual amount
+    const totalXAmount = new BN(10); // Replace with actual amount
     const strategyType = StrategyType.SpotBalanced; // Ensure this uses the enum
 
     // Create the position and retrieve its PublicKey
-    const positionPubKey: PublicKey = await client.createPosition(totalXAmount, strategyType, strategy); // Pass `strategy` here
+    const positionPubKey: PublicKey = await client.createPosition(totalXAmount, strategyType, strategy);
     console.log(`Position created with Public Key: ${positionPubKey.toBase58()}`);
 
-    // Retrieve the Active Bin after position creation
-    const activeBinInfo = await client.getActiveBin();
-    const activeBinId = activeBinInfo.binId;
-    console.log(`Active Bin ID at Position Creation: ${activeBinId}`);
-
-    // Calculate bin ranges based on active bin
-    const TOTAL_RANGE_INTERVAL = 10;
-    const minBinRange = activeBinId - TOTAL_RANGE_INTERVAL;
-    const maxBinRange = activeBinId + TOTAL_RANGE_INTERVAL;
-    console.log(`Calculated Bin Ranges - Min: ${minBinRange}, Max: ${maxBinRange}`);
-
-    // Store the position's bin ranges
+    // Store the position's bin ranges using strategy parameters
     positionStorage.addPosition(positionPubKey, {
-      originalActiveBin: activeBinId,
-      minBinRange,
-      maxBinRange,
+      originalActiveBin: activeBin.binId,  // Use the activeBin we already have from earlier
+      minBinRange: strategy.minBinId,        
+      maxBinRange: strategy.maxBinId,       
     });
     console.log(`Stored bin ranges for position ${positionPubKey.toBase58()}`);
 

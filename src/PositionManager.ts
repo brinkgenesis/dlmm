@@ -3,6 +3,7 @@ import { DLMMClient } from './utils/DLMMClient';
 import { Config } from './models/Config';
 import BN from 'bn.js';
 import { PositionStorage } from './utils/PositionStorage';
+import { StrategyType, StrategyParameters } from '@meteora-ag/dlmm';
 
 /**
  * PositionManager is responsible for managing liquidity positions based on market conditions.
@@ -78,9 +79,12 @@ export class PositionManager {
           await this.client.removeLiquidity(positionPubKey);
           console.log(`Liquidity removal initiated for position: ${positionPubKey.toBase58()}`);
 
-          // Optionally, remove the position from storage if it's closed
+          // Remove the position from storage
           this.positionStorage.removePosition(positionPubKey);
           console.log(`Position ${positionPubKey.toBase58()} removed from storage.`);
+
+          // Recreate the position with updated bin ranges
+          await this.createNewPosition();
         } else {
           console.log(`No action required for position: ${positionPubKey.toBase58()}`);
         }
@@ -88,5 +92,46 @@ export class PositionManager {
     } catch (error: any) {
       console.error('Error managing positions:', error.message || error);
     }
+  }
+
+  /**
+   * Creates a new position with updated bin ranges based on the current active bin.
+   */
+  private async createNewPosition(): Promise<void> {
+    // Get the active bin
+    const activeBin = await this.client.getActiveBin();
+    console.log('Current Active Bin:', activeBin);
+
+    const activeBinId = activeBin.binId;
+    const binStep = this.client.getBinStep();
+    console.log(`Bin Step: ${binStep}`);
+
+    // Define new bin ranges
+    const TOTAL_RANGE_INTERVAL = 10;
+    const minBinId = activeBinId - TOTAL_RANGE_INTERVAL;
+    const maxBinId = activeBinId + TOTAL_RANGE_INTERVAL;
+
+    // Create strategy parameters
+    const strategy: StrategyParameters = {
+      minBinId: minBinId,
+      maxBinId: maxBinId,
+      strategyType: StrategyType.SpotBalanced,
+      singleSidedX: false,
+    };
+
+    // Total X amount to add - adjust as needed
+    const totalXAmount = new BN(10000); // Replace with actual amount
+
+    // Create the new position
+    const positionPubKey: PublicKey = await this.client.createPosition(totalXAmount, StrategyType.SpotBalanced, strategy);
+    console.log(`New position created with Public Key: ${positionPubKey.toBase58()}`);
+
+    // Store the new position's bin ranges
+    this.positionStorage.addPosition(positionPubKey, {
+      originalActiveBin: activeBinId,
+      minBinRange: minBinId,
+      maxBinRange: maxBinId,
+    });
+    console.log(`Stored bin ranges for new position ${positionPubKey.toBase58()}`);
   }
 }
