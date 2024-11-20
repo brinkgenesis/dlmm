@@ -316,22 +316,29 @@ export class DLMMClient {
 
     try {
       console.log('--- Initiating createPosition ---');
-      console.log(`Strategy Type: ${StrategyType[strategyType]}`);
+      console.log('Strategy Type:', strategyType);
+
+      // Fetch Active Bin Info
+      const activeBin = await this.getActiveBin();
+      console.log('Active Bin:', activeBin);
+      console.log(`Active Bin Price per Token: ${activeBin.price}`);
+
+      // Calculate totalYAmount with scaling
+      const PRICE_SCALE = 1_000_000;
+      const scaledPrice = Math.floor(activeBin.price * PRICE_SCALE);
+      
+      // Calculate scaled Y amount
+      const scaledYAmount = totalXAmount.mul(new BN(scaledPrice));
+      // Descale the result
+      const totalYAmount = scaledYAmount.div(new BN(PRICE_SCALE));
+      
+      console.log(`Scaled Price: ${scaledPrice}`);
+      console.log(`Total X Amount: ${totalXAmount.toString()}`);
+      console.log(`Total Y Amount: ${totalYAmount.toString()}`);
 
       // Generate new Keypair for the position
       const positionKeypair = Keypair.generate();
       const positionPubKey = positionKeypair.publicKey;
-
-      // Fetch Active Bin Info
-      const activeBin = await this.getActiveBin();
-
-      // Calculate total Y amount based on active bin price
-      const activeBinPricePerTokenStr = this.dlmmPool.fromPricePerLamport(Number(activeBin.price));
-      const activeBinPricePerToken = parseFloat(activeBinPricePerTokenStr);
-
-      const totalYAmount = totalXAmount.mul(new BN(Math.floor(activeBinPricePerToken)));
-      console.log(`Active Bin Price per Token: ${activeBinPricePerToken}`);
-      console.log(`Total Y Amount: ${totalYAmount.toString()}`);
 
       // Use the strategy parameters provided
       console.log('Creating position with custom strategy parameters.');
