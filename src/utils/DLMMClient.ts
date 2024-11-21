@@ -217,29 +217,37 @@ export class DLMMClient {
   }
 
   /**
-   * Retrieves and logs the balances of Token X and Token Y for the user.
+   * Checks and returns the token balances for the user.
+   * @returns An object containing the token X and Y balances.
    */
-  async checkTokenBalances(): Promise<void> {
+  async checkTokenBalances(): Promise<{ xTokenBalance: BN; yTokenBalance: BN }> {
     try {
       if (!this.dlmmPool) {
         throw new Error('DLMM Pool is not initialized. Call initializeDLMMPool() first.');
       }
 
       const userPublicKey = new PublicKey(this.config.publickey);
-      const tokenXMint = this.dlmmPool.tokenX.publicKey;
-      const tokenYMint = this.dlmmPool.tokenY.publicKey;
 
-      const ataTokenX = await getAssociatedTokenAddress(tokenXMint, userPublicKey);
-      const ataTokenY = await getAssociatedTokenAddress(tokenYMint, userPublicKey);
+      // Get Associated Token Account addresses
+      const atatokenX = await getAssociatedTokenAddress(this.dlmmPool.tokenX.publicKey, userPublicKey);
+      const atatokenY = await getAssociatedTokenAddress(this.dlmmPool.tokenY.publicKey, userPublicKey);
 
-      // Fetch account info
-      const tokenXAccount = await getAccount(this.config.connection, ataTokenX);
-      const tokenYAccount = await getAccount(this.config.connection, ataTokenY);
+      // Fetch token account info
+      const tokenXAccount = await getAccount(this.config.connection, atatokenX);
+      const tokenYAccount = await getAccount(this.config.connection, atatokenY);
 
-      console.log(`Token X Balance: ${tokenXAccount.amount.toString()} tokens`);
-      console.log(`Token Y Balance: ${tokenYAccount.amount.toString()} tokens`);
+      // Extract token balances
+      const xTokenBalance = new BN(tokenXAccount.amount.toString());
+      const yTokenBalance = new BN(tokenYAccount.amount.toString());
+
+      console.log(`Token X Balance: ${xTokenBalance.toString()}`);
+      console.log(`Token Y Balance: ${yTokenBalance.toString()}`);
+
+      // Return balances
+      return { xTokenBalance, yTokenBalance };
     } catch (error: any) {
       console.error('Error checking token balances:', error.message || error);
+      throw error;
     }
   }
 
