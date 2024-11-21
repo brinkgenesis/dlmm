@@ -53,7 +53,7 @@ interface PositionVersion {
   } 
 
 /**
- * DLMMClient is responsible for initializing the Meteora DLMM SDK and retrieving active bins.
+ * DLMMClient is responsible for initializing the Meteora DLMM SDK and managing operations.
  */
 export class DLMMClient {
   private dlmmPool?: DLMM;
@@ -568,6 +568,55 @@ export class DLMMClient {
     const binStepBN = (this.dlmmPool as any).lbPair.binStep; // Use 'as any' if TypeScript complains
     console.log(`Bin Step: ${binStepBN}`);
     return binStepBN;
+  }
+
+  /**
+   * Checks if the pool can sync with the given market price.
+   * @param marketPrice - The current market price.
+   * @returns A Promise that resolves to a boolean indicating if synchronization is possible.
+   */
+  public async canSyncWithMarketPrice(marketPrice: number): Promise<boolean> {
+    if (!this.dlmmPool) {
+      throw new Error('DLMM Pool is not initialized.');
+    }
+
+    // Use getActiveBin() to get the current active bin
+    const activeBin = await this.getActiveBin();
+    const activeBinId = activeBin.binId;
+
+    // Use the activeBinId to check if synchronization is possible
+    const canSync = this.dlmmPool.canSyncWithMarketPrice(marketPrice, activeBinId);
+    console.log(`Can Sync with Market Price: ${canSync}`);
+    return canSync;
+  }
+
+  /**
+   * Synchronizes the pool's active bin with the market price.
+   * @param marketPrice - The market price to sync with.
+   * @returns A Promise that resolves when the synchronization is complete.
+   */
+  public async syncWithMarketPrice(marketPrice: number): Promise<void> {
+    if (!this.dlmmPool) {
+      throw new Error('DLMM Pool is not initialized.');
+    }
+
+    const ownerPublicKey = new PublicKey(this.config.publickey);
+
+    // Generate the synchronization transaction
+    const syncTransaction = await this.dlmmPool.syncWithMarketPrice(marketPrice, ownerPublicKey);
+
+    // Sign and send the transaction
+    const signature = await sendAndConfirmTransaction(
+      this.config.connection,
+      syncTransaction,
+      [this.config.walletKeypair],
+      {
+        preflightCommitment: 'confirmed',
+        skipPreflight: false,
+      }
+    );
+
+    console.log(`Synchronization transaction signature: ${signature}`);
   }
 
 }

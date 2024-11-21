@@ -36,6 +36,7 @@ import { RiskManager } from './RiskManager';
     const currentPrice = activeBin.price;
     console.log(`Fetched Price: ${currentPrice}`);
 
+
     // Get binStep using the new method
     const binStep = client.getBinStep();
     console.log(`Fetched binStep: ${binStep}`);
@@ -64,20 +65,25 @@ import { RiskManager } from './RiskManager';
 
     // Proceed with execution logic using the bin IDs
     
-    // Define strategy parameters
+    // **Ensuring Pool is Synced Before Creating a Position**
+    if (await client.canSyncWithMarketPrice(currentPrice)) {
+      await client.syncWithMarketPrice(currentPrice);
+      console.log('Pool synchronized before creating position.');
+    }
+
+    // Proceed to create the position
     const strategy: StrategyParameters = {
       minBinId: lowerBinId,
       maxBinId: upperBinId,
       strategyType: StrategyType.SpotBalanced, // Use the enum value
       singleSidedX: false, // Set based on your strategy
     };
-   
 
-    // Creating a new position
-    const totalXAmount = new BN(10); // Replace with actual amount
-    const strategyType = StrategyType.SpotBalanced; // Ensure this uses the enum
+    //Create new Position
+    const totalXAmount = new BN(10000); // Replace with actual amount
+    const strategyType = StrategyType.SpotBalanced;
 
-    // Create the position and retrieve its PublicKey
+    //New pubkey for position
     const positionPubKey: PublicKey = await client.createPosition(totalXAmount, strategyType, strategy);
     console.log(`Position created with Public Key: ${positionPubKey.toBase58()}`);
 
