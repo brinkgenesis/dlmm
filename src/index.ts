@@ -71,7 +71,7 @@ import { RiskManager } from './RiskManager';
       console.log('Pool synchronized before creating position.');
     }
 
-    // Proceed to create the position
+    // Proceed to create the position without totalYAmount
     const strategy: StrategyParameters = {
       minBinId: lowerBinId,
       maxBinId: upperBinId,
@@ -79,12 +79,16 @@ import { RiskManager } from './RiskManager';
       singleSidedX: false, // Set based on your strategy
     };
 
-    //Create new Position
+    // Create new Position
     const totalXAmount = new BN(10000); // Replace with actual amount
     const strategyType = StrategyType.SpotBalanced;
 
-    //New pubkey for position
-    const positionPubKey: PublicKey = await client.createPosition(totalXAmount, strategyType, strategy);
+    // New pubkey for position
+    const positionPubKey: PublicKey = await client.createPosition(
+      totalXAmount,
+      strategyType,
+      strategy
+    );
     console.log(`Position created with Public Key: ${positionPubKey.toBase58()}`);
 
     // Store the position's bin ranges using strategy parameters

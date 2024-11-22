@@ -105,7 +105,7 @@ export class PositionManager {
     try {
       console.log('--- Balancing Token Amounts ---');
 
-      // Fetch the latest token balances
+      // Fetch the latest token balances and convert to Decimal
       const tokenBalances = await this.client.checkTokenBalances();
       const xTokenBalance = new Decimal(tokenBalances.xTokenBalance.toString());
       const yTokenBalance = new Decimal(tokenBalances.yTokenBalance.toString());
@@ -215,11 +215,12 @@ export class PositionManager {
       console.log(`Total X Amount for Position: ${totalXAmount.toString()}`);
       console.log(`Total Y Amount for Position: ${totalYAmount.toString()}`);
 
-      // Create the new position
+      // Create the new position, passing both totalXAmount and totalYAmount
       const positionPubKey: PublicKey = await this.client.createPosition(
         totalXAmount,
         StrategyType.SpotBalanced,
-        strategy
+        strategy,
+        totalYAmount  // Pass totalYAmount here
       );
       console.log(`New position created with Public Key: ${positionPubKey.toBase58()}`);
 

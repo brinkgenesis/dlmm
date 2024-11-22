@@ -311,13 +311,15 @@ export class DLMMClient {
    * Creates a new liquidity position within the DLMM pool.
    * @param totalXAmount - The total amount of Token X to add to the liquidity pool.
    * @param strategyType - The strategy type to use for adding liquidity.
-   * @param strategy - (Optional) Strategy parameters including minBinId and maxBinId.
+   * @param strategy - Strategy parameters including minBinId and maxBinId.
+   * @param totalYAmount - (Optional) The total amount of Token Y to add to the liquidity pool.
    * @returns The public key of the created position.
    */
   public async createPosition(
     totalXAmount: BN,
     strategyType: StrategyType,
-    strategy: StrategyParameters
+    strategy: StrategyParameters,
+    totalYAmount?: BN
   ): Promise<PublicKey> {
     if (!this.dlmmPool) {
       throw new Error('DLMM Pool is not initialized. Call initializeDLMMPool() first.');
@@ -327,32 +329,37 @@ export class DLMMClient {
       console.log('--- Initiating createPosition ---');
       console.log('Strategy Type:', strategyType);
 
-      // Fetch Active Bin Info
-      const activeBin = await this.getActiveBin();
-      console.log('Active Bin:', activeBin);
-      console.log(`Active Bin Price per Token: ${activeBin.price}`);
+      // If totalYAmount is not provided, calculate it
+      if (!totalYAmount) {
+        // Fetch Active Bin Info
+        const activeBin = await this.getActiveBin();
+        console.log('Active Bin:', activeBin);
+        console.log(`Active Bin Price per Token: ${activeBin.price}`);
 
-      // Convert totalXAmount to Decimal for calculations
-      const totalXAmountDecimal = new Decimal(totalXAmount.toString());
+        // Convert totalXAmount to Decimal for calculations
+        const totalXAmountDecimal = new Decimal(totalXAmount.toString());
 
-      // Get the market price as Decimal
-      const activeBinPrice = new Decimal(activeBin.price.toString());
+        // Get the market price as Decimal
+        const activeBinPrice = new Decimal(activeBin.price.toString());
 
-      // Calculate totalYAmount
-      const totalYAmountDecimal = totalXAmountDecimal.mul(activeBinPrice);
+        // Calculate totalYAmount
+        const totalYAmountDecimal = totalXAmountDecimal.mul(activeBinPrice);
 
-      // Convert totalYAmount back to BN
-      const totalYAmount = new BN(totalYAmountDecimal.toFixed(0, Decimal.ROUND_DOWN));
+        // Convert totalYAmount back to BN
+        totalYAmount = new BN(totalYAmountDecimal.toFixed(0, Decimal.ROUND_DOWN));
 
-      console.log(`Total X Amount: ${totalXAmount.toString()}`);
-      console.log(`Total Y Amount: ${totalYAmount.toString()}`);
+        console.log(`Calculated Total Y Amount: ${totalYAmount.toString()}`);
+      } else {
+        console.log(`Using provided Total Y Amount: ${totalYAmount.toString()}`);
+      }
 
       // Generate new Keypair for the position
       const positionKeypair = Keypair.generate();
       const positionPubKey = positionKeypair.publicKey;
 
       // Use the strategy parameters provided
-      console.log('Creating position with custom strategy parameters.');
+      console.log('Creating position with strategy parameters.');
+
       const transaction = await this.dlmmPool.initializePositionAndAddLiquidityByStrategy({
         positionPubKey: positionPubKey,
         totalXAmount: totalXAmount,
