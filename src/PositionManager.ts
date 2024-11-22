@@ -107,8 +107,8 @@ export class PositionManager {
 
       // Fetch the latest token balances
       const tokenBalances = await this.client.checkTokenBalances();
-      const xTokenBalance = tokenBalances.xTokenBalance;
-      const yTokenBalance = tokenBalances.yTokenBalance;
+      const xTokenBalance = new Decimal(tokenBalances.xTokenBalance.toString());
+      const yTokenBalance = new Decimal(tokenBalances.yTokenBalance.toString());
 
       console.log(
         `Current Token Balances: X - ${xTokenBalance.toString()}, Y - ${yTokenBalance.toString()}`

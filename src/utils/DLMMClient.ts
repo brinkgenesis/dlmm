@@ -10,6 +10,7 @@ import {
 } from '@solana/spl-token';
 import { SendTransactionError } from '@solana/web3.js';
 import { formatBN } from './formatBN';
+import Decimal from 'decimal.js';
 
 /**
  * Represents a user's position.
@@ -331,16 +332,18 @@ export class DLMMClient {
       console.log('Active Bin:', activeBin);
       console.log(`Active Bin Price per Token: ${activeBin.price}`);
 
-      // Calculate totalYAmount with scaling
-      const PRICE_SCALE = 1_000_000;
-      const scaledPrice = Math.floor(activeBin.price * PRICE_SCALE);
-      
-      // Calculate scaled Y amount
-      const scaledYAmount = totalXAmount.mul(new BN(scaledPrice));
-      // Descale the result
-      const totalYAmount = scaledYAmount.div(new BN(PRICE_SCALE));
-      
-      console.log(`Scaled Price: ${scaledPrice}`);
+      // Convert totalXAmount to Decimal for calculations
+      const totalXAmountDecimal = new Decimal(totalXAmount.toString());
+
+      // Get the market price as Decimal
+      const activeBinPrice = new Decimal(activeBin.price.toString());
+
+      // Calculate totalYAmount
+      const totalYAmountDecimal = totalXAmountDecimal.mul(activeBinPrice);
+
+      // Convert totalYAmount back to BN
+      const totalYAmount = new BN(totalYAmountDecimal.toFixed(0, Decimal.ROUND_DOWN));
+
       console.log(`Total X Amount: ${totalXAmount.toString()}`);
       console.log(`Total Y Amount: ${totalYAmount.toString()}`);
 
