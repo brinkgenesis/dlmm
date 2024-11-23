@@ -53,7 +53,7 @@ export class PositionManager {
           continue;
         }
 
-        const { originalActiveBin, minBinRange, maxBinRange } = storedRange;
+        const { originalActiveBin, minBinId, maxBinId } = storedRange;
 
         // Determine current active bin from the latest market data
         const currentActiveBinInfo = await this.client.getActiveBin();
@@ -64,16 +64,16 @@ export class PositionManager {
 
         console.log(`Position: ${positionPubKey.toBase58()}`);
         console.log(`Original Active Bin: ${originalActiveBin}`);
-        console.log(`Min Bin Range: ${minBinRange}`);
-        console.log(`Max Bin Range: ${maxBinRange}`);
+        console.log(`Min Bin ID: ${minBinId}`);
+        console.log(`Max Bin ID: ${maxBinId}`);
         console.log(`Current Active Bin: ${currentActiveBinId}`);
 
         // Determine if currentActiveBinId has moved sufficiently to warrant liquidity removal
         const shouldRemoveLiquidity =
           currentActiveBinId <= originalActiveBin - 6 ||
           currentActiveBinId >= originalActiveBin + 6 ||
-          currentActiveBinId <= minBinRange + 4 ||
-          currentActiveBinId >= maxBinRange - 4;
+          currentActiveBinId <= minBinId + 4 ||
+          currentActiveBinId >= maxBinId - 4;
 
         if (shouldRemoveLiquidity) {
           console.log(`Criteria met for removing liquidity from position: ${positionPubKey.toBase58()}`);
@@ -227,8 +227,8 @@ export class PositionManager {
       // Store the new position's bin ranges
       this.positionStorage.addPosition(positionPubKey, {
         originalActiveBin: activeBinId,
-        minBinRange: minBinId,
-        maxBinRange: maxBinId,
+        minBinId: minBinId,
+        maxBinId: maxBinId,
       });
       console.log(`Stored bin ranges for new position ${positionPubKey.toBase58()}`);
     } catch (error: any) {

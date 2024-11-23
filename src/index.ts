@@ -93,9 +93,9 @@ import { RiskManager } from './RiskManager';
 
     // Store the position's bin ranges using strategy parameters
     positionStorage.addPosition(positionPubKey, {
-      originalActiveBin: activeBin.binId,  // Use the activeBin we already have from earlier
-      minBinRange: strategy.minBinId,        
-      maxBinRange: strategy.maxBinId,       
+      originalActiveBin: activeBin.binId,
+      minBinId: strategy.minBinId,
+      maxBinId: strategy.maxBinId,
     });
     console.log(`Stored bin ranges for position ${positionPubKey.toBase58()}`);
 

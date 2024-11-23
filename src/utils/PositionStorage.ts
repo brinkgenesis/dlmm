@@ -4,8 +4,8 @@ import { PublicKey } from '@solana/web3.js';
 
 interface PositionRange {
   originalActiveBin: number;
-  minBinRange: number;
-  maxBinRange: number;
+  minBinId: number;
+  maxBinId: number;
 }
 
 interface PositionsMapping {
