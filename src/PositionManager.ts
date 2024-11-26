@@ -161,7 +161,7 @@ export class PositionManager {
         console.log(`Amount of Token X to Swap: ${amountToSwap.toString()}`);
 
         // Perform the swap
-        const allowedSlippageBps = new BN(50); // e.g., 0.5% slippage
+        const allowedSlippageBps = new BN(this.config.allowedSlippageBps);
         await this.client.swapTokens(amountToSwap, false, allowedSlippageBps); // Swap X to Y
         console.log(`Swapped ${amountToSwap.toString()} of Token X to Token Y`);
       } else {
@@ -170,7 +170,7 @@ export class PositionManager {
         console.log(`Amount of Token Y to Swap: ${amountToSwap.toString()}`);
 
         // Perform the swap
-        const allowedSlippageBps = new BN(50); // e.g., 0.5% slippage
+        const allowedSlippageBps = new BN(this.config.allowedSlippageBps);
         await this.client.swapTokens(amountToSwap, true, allowedSlippageBps); // Swap Y to X
         console.log(`Swapped ${amountToSwap.toString()} of Token Y to Token X`);
       }
@@ -195,7 +195,7 @@ export class PositionManager {
       const activeBinId = activeBin.binId;
 
       // Define new bin ranges
-      const TOTAL_RANGE_INTERVAL = 10;
+      const TOTAL_RANGE_INTERVAL = this.config.totalRangeInterval;
       const minBinId = activeBinId - TOTAL_RANGE_INTERVAL;
       const maxBinId = activeBinId + TOTAL_RANGE_INTERVAL;
 

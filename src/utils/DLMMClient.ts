@@ -513,10 +513,8 @@ export class DLMMClient {
         (bin) => bin.binId
       );
 
-      // Define the basis points to remove, e.g., 10000 BPS = 100%
-      const bpsToRemove: BN = new BN(10000);
-
-      console.log(`Bin IDs to Remove: ${binIdsToRemove.join(', ')}`);
+      // Use bpsToRemove from Config
+      const bpsToRemove: BN = new BN(this.config.bpsToRemove);
       console.log(`Basis Points to Remove: ${bpsToRemove.toString()}`);
       console.log(`Should Claim and Close: true`);
 

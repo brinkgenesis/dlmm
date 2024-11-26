@@ -7,7 +7,7 @@
  */
 
 import BN from 'bn.js';
-import * as math from 'mathjs';
+
 
 /**
  * Calculates the Impermanent Loss (IL) for Uniswap V3 based on the relative price change (alpha) and range factor (r).

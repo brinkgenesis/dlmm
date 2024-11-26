@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { PublicKey } from '@solana/web3.js';
+import { Config } from '../models/Config';
 
 interface PositionRange {
   originalActiveBin: number;
@@ -16,8 +17,8 @@ export class PositionStorage {
   private filePath: string;
   private positions: PositionsMapping = {};
 
-  constructor(fileName: string = 'positions.json') {
-    this.filePath = path.resolve(__dirname, `./data/${fileName}`);
+  constructor(config: Config, fileName: string = 'positions.json') {
+    this.filePath = path.resolve(config.dataDirectory, fileName);
     this.load();
   }
 

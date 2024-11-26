@@ -7,22 +7,44 @@ import bs58 from 'bs58';
  * Implements Singleton pattern to prevent multiple initializations.
  */
 export class Config {
-  publickey: string;
-  walletKeypair: Keypair;
-  connection: Connection;
+  public publickey: string;
+  public walletKeypair: Keypair;
+  public connection: Connection;
+
+  // New properties for configurations
+  public poolPublicKey: string;
+  public totalXAmount: number;
+  public dataDirectory: string;
+  public meteoraApiBaseUrl: string;
+  public volatilityCheckInterval: number;
+  public priceFeedUrl: string;
+  public defaultMaxHistoryLength: number;
+  public allowedSlippageBps: number;
+  public totalRangeInterval: number;
+  public bpsToRemove: number;
 
   private static instance: Config | null = null;
 
-  /**
-   * Private constructor to restrict instantiation.
-   * @param publickey - The public key of the wallet.
-   * @param walletKeypair - The wallet keypair for signing transactions.
-   * @param connection - The Solana connection object.
-   */
-  private constructor(publickey: string, walletKeypair: Keypair, connection: Connection) {
+  private constructor(
+    publickey: string,
+    walletKeypair: Keypair,
+    connection: Connection
+  ) {
     this.publickey = publickey;
     this.walletKeypair = walletKeypair;
     this.connection = connection;
+
+    // Load additional configurations
+    this.poolPublicKey = process.env.POOL_PUBLIC_KEY!;
+    this.totalXAmount = parseInt(process.env.TOTAL_X_AMOUNT!, 10);
+    this.dataDirectory = process.env.DATA_DIRECTORY!;
+    this.meteoraApiBaseUrl = process.env.METEORA_API_BASE_URL!;
+    this.volatilityCheckInterval = parseInt(process.env.VOLATILITY_CHECK_INTERVAL!, 10);
+    this.priceFeedUrl = process.env.PRICE_FEED_URL!;
+    this.defaultMaxHistoryLength = parseInt(process.env.DEFAULT_MAX_HISTORY_LENGTH!, 10);
+    this.allowedSlippageBps = parseInt(process.env.ALLOWED_SLIPPAGE_BPS!, 10);
+    this.totalRangeInterval = parseInt(process.env.TOTAL_RANGE_INTERVAL!, 10);
+    this.bpsToRemove = parseInt(process.env.BPS_TO_REMOVE!, 10);
   }
 
   /**
@@ -47,7 +69,6 @@ export class Config {
   private static initializeKeypair(): Keypair {
     try {
       const privateKeyString = process.env.PRIVATE_KEY!;
-      console.log(`PRIVATE_KEY loaded: ${privateKeyString.substring(0, 10)}...`); // Debug
       const privateKey = new Uint8Array(bs58.decode(privateKeyString));
       const keypair = Keypair.fromSecretKey(privateKey);
       console.log(`Initialized Keypair: Public Key - ${keypair.publicKey.toString()}`);

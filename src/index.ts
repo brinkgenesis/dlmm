@@ -22,7 +22,7 @@ import { RiskManager } from './RiskManager';
     console.log('DLMMClient instance created.');
 
     // Define the DLMM pool's public key
-    const poolPublicKey = new PublicKey('ARwi1S4DaiTG5DX7S4M4ZsrXqpMD1MrTmbu9ue2tpmEq'); // Replace with your actual pool public key
+    const poolPublicKey = new PublicKey(config.poolPublicKey);
 
     // Initialize the DLMM Pool
     await client.initializeDLMMPool(poolPublicKey);
@@ -42,7 +42,7 @@ import { RiskManager } from './RiskManager';
     console.log(`Fetched binStep: ${binStep}`);
 
     // Initialize PositionStorage
-    const positionStorage = new PositionStorage();
+    const positionStorage = new PositionStorage(config);
     console.log('PositionStorage instance created.');
 
     // Prompt user to select a risk case
@@ -80,7 +80,7 @@ import { RiskManager } from './RiskManager';
     };
 
     // Create new Position
-    const totalXAmount = new BN(10000); // Replace with actual amount
+    const totalXAmount = new BN(config.totalXAmount);
     const strategyType = StrategyType.SpotBalanced;
 
     // New pubkey for position
