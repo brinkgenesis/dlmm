@@ -13,12 +13,20 @@ interface PositionsMapping {
   [positionPubKey: string]: PositionRange;
 }
 
+/**
+ * PositionStorage manages the storage of user positions and their associated bin ranges.
+ */
 export class PositionStorage {
   private filePath: string;
   private positions: PositionsMapping = {};
 
-  constructor(config: Config, fileName: string = 'positions.json') {
-    this.filePath = path.resolve(config.dataDirectory, fileName);
+  /**
+   * Constructs a new PositionStorage instance.
+   * @param config - The configuration object containing necessary settings.
+   * @param fileName - The name of the file to store positions.
+   */
+  constructor(private config: Config, fileName: string = 'positions.json') {
+    this.filePath = path.resolve(this.config.dataDirectory, fileName);
     this.load();
   }
 
@@ -32,7 +40,6 @@ export class PositionStorage {
         this.positions = JSON.parse(data);
         console.log(`Loaded positions from ${this.filePath}`);
       } else {
-        // Ensure the directory exists
         fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
         fs.writeFileSync(this.filePath, JSON.stringify({}), 'utf-8');
         console.log(`Created new positions file at ${this.filePath}`);
@@ -60,7 +67,7 @@ export class PositionStorage {
    * @param positionPubKey - The public key of the position.
    * @param range - The bin range details.
    */
-  addPosition(positionPubKey: PublicKey, range: PositionRange): void {
+  public addPosition(positionPubKey: PublicKey, range: PositionRange): void {
     this.positions[positionPubKey.toBase58()] = range;
     this.save();
   }
@@ -70,7 +77,7 @@ export class PositionStorage {
    * @param positionPubKey - The public key of the position.
    * @returns The bin range details or undefined if not found.
    */
-  getPositionRange(positionPubKey: PublicKey): PositionRange | undefined {
+  public getPositionRange(positionPubKey: PublicKey): PositionRange | undefined {
     return this.positions[positionPubKey.toBase58()];
   }
 
@@ -78,7 +85,7 @@ export class PositionStorage {
    * Retrieves all stored position mappings.
    * @returns The complete positions mapping.
    */
-  getAllPositions(): PositionsMapping {
+  public getAllPositions(): PositionsMapping {
     return this.positions;
   }
 
@@ -86,7 +93,7 @@ export class PositionStorage {
    * Removes a position from the storage.
    * @param positionPubKey - The public key of the position.
    */
-  removePosition(positionPubKey: PublicKey): void {
+  public removePosition(positionPubKey: PublicKey): void {
     delete this.positions[positionPubKey.toBase58()];
     this.save();
   }

@@ -62,18 +62,36 @@ export class PositionManager {
         // Optionally, you can update min and max bin ranges if needed
         // For this example, we'll keep them static based on the original active bin
 
+        // Calculate thresholds based on percentages
+        const upperThreshold = Math.ceil(
+          originalActiveBin * (1 + this.config.liquidityRemovalUpperPercent / 100)
+        );
+        const lowerThreshold = Math.floor(
+          originalActiveBin * (1 - this.config.liquidityRemovalUpperPercent / 100)
+        );
+        const minBinThreshold = Math.ceil(
+          minBinId * (1 + this.config.liquidityRemovalLowerPercent / 100)
+        );
+        const maxBinThreshold = Math.floor(
+          maxBinId * (1 - this.config.liquidityRemovalLowerPercent / 100)
+        );
+
         console.log(`Position: ${positionPubKey.toBase58()}`);
         console.log(`Original Active Bin: ${originalActiveBin}`);
         console.log(`Min Bin ID: ${minBinId}`);
         console.log(`Max Bin ID: ${maxBinId}`);
         console.log(`Current Active Bin: ${currentActiveBinId}`);
+        console.log(`Upper Threshold (75% above original): ${upperThreshold}`);
+        console.log(`Lower Threshold (75% below original): ${lowerThreshold}`);
+        console.log(`Min Bin Threshold (25% above min): ${minBinThreshold}`);
+        console.log(`Max Bin Threshold (25% below max): ${maxBinThreshold}`);
 
         // Determine if currentActiveBinId has moved sufficiently to warrant liquidity removal
         const shouldRemoveLiquidity =
-          currentActiveBinId <= originalActiveBin - 6 ||
-          currentActiveBinId >= originalActiveBin + 6 ||
-          currentActiveBinId <= minBinId + 4 ||
-          currentActiveBinId >= maxBinId - 4;
+          currentActiveBinId >= upperThreshold ||
+          currentActiveBinId <= lowerThreshold ||
+          currentActiveBinId >= maxBinThreshold ||
+          currentActiveBinId <= minBinThreshold;
 
         if (shouldRemoveLiquidity) {
           console.log(`Criteria met for removing liquidity from position: ${positionPubKey.toBase58()}`);

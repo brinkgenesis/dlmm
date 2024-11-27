@@ -23,6 +23,10 @@ export class Config {
   public totalRangeInterval: number;
   public bpsToRemove: number;
 
+  // New percentage-based thresholds
+  public liquidityRemovalUpperPercent: number;
+  public liquidityRemovalLowerPercent: number;
+
   private static instance: Config | null = null;
 
   private constructor(
@@ -45,6 +49,10 @@ export class Config {
     this.allowedSlippageBps = parseInt(process.env.ALLOWED_SLIPPAGE_BPS!, 10);
     this.totalRangeInterval = parseInt(process.env.TOTAL_RANGE_INTERVAL!, 10);
     this.bpsToRemove = parseInt(process.env.BPS_TO_REMOVE!, 10);
+
+    // Load percentage-based thresholds
+    this.liquidityRemovalUpperPercent = parseFloat(process.env.LIQUIDITY_REMOVAL_UPPER_PERCENT!);
+    this.liquidityRemovalLowerPercent = parseFloat(process.env.LIQUIDITY_REMOVAL_LOWER_PERCENT!);
   }
 
   /**
