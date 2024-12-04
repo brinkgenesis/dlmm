@@ -40,6 +40,7 @@ export class PositionStorage {
         this.positions = JSON.parse(data);
         console.log(`Loaded positions from ${this.filePath}`);
       } else {
+        // Ensure the directory exists
         fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
         fs.writeFileSync(this.filePath, JSON.stringify({}), 'utf-8');
         console.log(`Created new positions file at ${this.filePath}`);
