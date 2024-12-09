@@ -7,6 +7,7 @@ import BN from 'bn.js';
 import DLMM, { StrategyType, StrategyParameters } from '@meteora-ag/dlmm';
 import { formatBN } from './utils/formatBN';
 import { RiskManager } from './RiskManager';
+import inquirer from 'inquirer';
 
 /**
  * Main execution block
@@ -36,7 +37,6 @@ import { RiskManager } from './RiskManager';
     const currentPrice = activeBin.price;
     console.log(`Fetched Price: ${currentPrice}`);
 
-
     // Get binStep using the new method
     const binStep = client.getBinStep();
     console.log(`Fetched binStep: ${binStep}`);
@@ -48,7 +48,6 @@ import { RiskManager } from './RiskManager';
     // Prompt user to select a risk case
     const priceSpread = await RiskManager.promptUserForRiskCase();
 
-    
     // Calculate bin parameters based on the selected risk case
     const { lowerPrice, upperPrice } = RiskManager.calculateBinParameters(currentPrice, priceSpread);
 
@@ -63,9 +62,31 @@ import { RiskManager } from './RiskManager';
     console.log(`Lower Bin ID: ${lowerBinId}`);
     console.log(`Upper Bin ID: ${upperBinId}`);
 
-    // Proceed with execution logic using the bin IDs
-    
-    // **Ensuring Pool is Synced Before Creating a Position**
+    // **Prompt User for Bin Steps**
+    const binStepsAnswer = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'binSteps',
+        message: 'Input Bin Steps (leave empty to use default from config):',
+        validate: (input: string) => {
+          if (input === '') return true;
+          const parsed = parseInt(input, 10);
+          return (!isNaN(parsed) && parsed > 0) || 'Please enter a valid positive number';
+        },
+      },
+    ]);
+
+    let totalRangeInterval: number;
+    if (binStepsAnswer.binSteps !== '') {
+      const binSteps = parseInt(binStepsAnswer.binSteps, 10);
+      totalRangeInterval = Math.floor(binSteps / 2);
+    } else {
+      totalRangeInterval = config.totalRangeInterval;
+    }
+
+    console.log(`Using Total Range Interval: ${totalRangeInterval}`);
+
+    // Ensure Pool is Synced Before Creating a Position
     if (await client.canSyncWithMarketPrice(currentPrice)) {
       await client.syncWithMarketPrice(currentPrice);
       console.log('Pool synchronized before creating position.');
@@ -99,8 +120,13 @@ import { RiskManager } from './RiskManager';
     });
     console.log(`Stored bin ranges for position ${positionPubKey.toBase58()}`);
 
-    // Create PositionManager instance
-    const positionManager = new PositionManager(client, config, positionStorage);
+    // **Create PositionManager Instance with totalRangeInterval**
+    const positionManager = new PositionManager(
+      client,
+      config,
+      positionStorage,
+      totalRangeInterval
+    );
     console.log('PositionManager instance created.');
 
     // Ensure Associated Token Accounts exist

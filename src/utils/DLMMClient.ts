@@ -1,5 +1,5 @@
 import { PublicKey, Connection, sendAndConfirmTransaction, Transaction, Signer, Keypair, TransactionSignature, ComputeBudgetProgram } from '@solana/web3.js';
-import DLMM, { StrategyType, StrategyParameters, LbPosition, SwapQuote, computeBudgetIx } from '@meteora-ag/dlmm';
+import DLMM, { StrategyType, PositionVersion, StrategyParameters, LbPosition, SwapQuote, computeBudgetIx } from '@meteora-ag/dlmm';
 import { Config } from '../models/Config';
 import '@coral-xyz/anchor';
 import BN from 'bn.js';
@@ -18,7 +18,6 @@ import Decimal from 'decimal.js';
 interface UserPosition {
     publicKey: PublicKey;
     positionData: PositionData;
-    version: PositionVersion;
   }
 
 interface PositionData {
@@ -49,9 +48,7 @@ interface PositionBinData {
     positionYAmount: string;
   }
   
-interface PositionVersion {
-    // Define based on SDK specifications
-  } 
+
 
 /**
  * DLMMClient is responsible for initializing the Meteora DLMM SDK and managing operations.
@@ -568,6 +565,79 @@ export class DLMMClient {
     } catch (error: any) {
       console.error('Error removing liquidity:', error.message || error);
       console.log('--- removeLiquidity Encountered an Error ---');
+    }
+  }
+
+  /**
+   * Closes a position within the DLMM pool.
+   * @param positionPubKey - The public key of the position to close.
+   */
+  public async closePosition(positionPubKey: PublicKey): Promise<void> {
+    try {
+      console.log('--- Initiating closePosition ---');
+      console.log(`Position Public Key: ${positionPubKey.toBase58()}`);
+
+      if (!this.dlmmPool) {
+        throw new Error('DLMM Pool is not initialized. Call initializeDLMMPool() first.');
+      }
+
+      // Retrieve all user positions using existing method
+      const userPositions = await this.getUserPositions();
+
+      // Find the specific position matching positionPubKey
+      const userPosition = userPositions.find((position) =>
+        position.publicKey.equals(positionPubKey)
+      );
+
+      if (!userPosition) {
+        console.error('No matching position found for the provided position public key.');
+        return; // Or throw an error if appropriate
+      }
+
+      console.log('Matched User Position:', userPosition);
+
+      // **Construct LbPosition with version explicitly set to PositionVersion.V2**
+      const position: LbPosition = {
+        publicKey: userPosition.publicKey,
+        positionData: userPosition.positionData,
+        version: PositionVersion.V2, // Explicitly set to V2
+      };
+
+      // Generate transaction to close the position
+      const closePositionTx = await this.dlmmPool.closePosition({
+        owner: this.config.walletKeypair.publicKey,
+        position: position, // Pass the LbPosition object
+      });
+
+      console.log('Initialized Close Position Transaction');
+
+      // Assign the recent blockhash and fee payer
+      const { blockhash } = await this.config.connection.getLatestBlockhash('finalized');
+      closePositionTx.recentBlockhash = blockhash;
+      closePositionTx.feePayer = this.config.walletKeypair.publicKey;
+      console.log('Assigned Blockhash and Fee Payer to Transaction');
+
+      // Signers for the transaction: the user
+      const signers: Signer[] = [this.config.walletKeypair];
+      console.log('Assigned Signers:', signers.map((s) => s.publicKey.toBase58()));
+
+      // Send and confirm the transaction
+      console.log('Sending Transaction...');
+      const signature: TransactionSignature = await sendAndConfirmTransaction(
+        this.config.connection,
+        closePositionTx,
+        signers,
+        {
+          skipPreflight: false,
+          preflightCommitment: 'confirmed',
+        }
+      );
+
+      console.log(`Position closed successfully with signature: ${signature}`);
+      console.log('--- closePosition Completed Successfully ---');
+    } catch (error: any) {
+      console.error('Error closing position:', error.message || error);
+      throw error;
     }
   }
 

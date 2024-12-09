@@ -13,17 +13,25 @@ export class PositionManager {
   private client: DLMMClient;
   private config: Config;
   private positionStorage: PositionStorage;
+  private totalRangeInterval: number;
 
   /**
    * Constructs a new PositionManager instance.
    * @param client - An instance of DLMMClient.
    * @param config - The configuration object containing necessary settings.
    * @param positionStorage - An instance of PositionStorage.
+   * @param totalRangeInterval - The total range interval for bin calculations.
    */
-  constructor(client: DLMMClient, config: Config, positionStorage: PositionStorage) {
+  constructor(
+    client: DLMMClient,
+    config: Config,
+    positionStorage: PositionStorage,
+    totalRangeInterval: number
+  ) {
     this.client = client;
     this.config = config;
     this.positionStorage = positionStorage;
+    this.totalRangeInterval = totalRangeInterval;
   }
 
   /**
@@ -97,6 +105,10 @@ export class PositionManager {
           console.log(`Criteria met for removing liquidity from position: ${positionPubKey.toBase58()}`);
           await this.client.removeLiquidity(positionPubKey);
           console.log(`Liquidity removal initiated for position: ${positionPubKey.toBase58()}`);
+
+          // Call closePosition after removing liquidity
+          await this.client.closePosition(positionPubKey);
+          console.log(`Position closed: ${positionPubKey.toBase58()}`);
 
           // Remove the position from storage
           this.positionStorage.removePosition(positionPubKey);
@@ -212,8 +224,8 @@ export class PositionManager {
 
       const activeBinId = activeBin.binId;
 
-      // Define new bin ranges
-      const TOTAL_RANGE_INTERVAL = this.config.totalRangeInterval;
+      // Use the user-provided totalRangeInterval
+      const TOTAL_RANGE_INTERVAL = this.totalRangeInterval;
       const minBinId = activeBinId - TOTAL_RANGE_INTERVAL;
       const maxBinId = activeBinId + TOTAL_RANGE_INTERVAL;
 
