@@ -12,7 +12,6 @@ export class Config {
   public connection: Connection;
 
   // New properties for configurations
-  public poolPublicKey: string;
   public totalXAmount: number;
   public dataDirectory: string;
   public meteoraApiBaseUrl: string;
@@ -27,6 +26,8 @@ export class Config {
   public liquidityRemovalUpperPercent: number;
   public liquidityRemovalLowerPercent: number;
 
+  private _poolPublicKey?: string;
+
   private static instance: Config | null = null;
 
   private constructor(
@@ -39,7 +40,6 @@ export class Config {
     this.connection = connection;
 
     // Load additional configurations
-    this.poolPublicKey = process.env.POOL_PUBLIC_KEY!;
     this.totalXAmount = parseInt(process.env.TOTAL_X_AMOUNT!, 10);
     this.dataDirectory = process.env.DATA_DIRECTORY!;
     this.meteoraApiBaseUrl = process.env.METEORA_API_BASE_URL!;
@@ -101,5 +101,16 @@ export class Config {
       console.error('Failed to initialize Solana Connection:', error.message);
       process.exit(1);
     }
+  }
+
+  public set poolPublicKey(value: string) {
+    this._poolPublicKey = value;
+  }
+
+  public get poolPublicKey(): string {
+    if (!this._poolPublicKey) {
+      throw new Error('Pool Public Key has not been set.');
+    }
+    return this._poolPublicKey;
   }
 }

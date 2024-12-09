@@ -8,6 +8,8 @@ import DLMM, { StrategyType, StrategyParameters } from '@meteora-ag/dlmm';
 import { formatBN } from './utils/formatBN';
 import { RiskManager } from './RiskManager';
 import inquirer from 'inquirer';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * Main execution block
@@ -18,12 +20,36 @@ import inquirer from 'inquirer';
     const config = Config.load();
     console.log('Configuration loaded successfully.');
 
+    // **Read markets.json**
+    const marketsPath = path.join(__dirname, 'models', 'markets.json');
+    const marketsData = fs.readFileSync(marketsPath, 'utf-8');
+    const markets = JSON.parse(marketsData);
+
+    // **Prompt user to select a market**
+    const marketChoices = markets.map((market: any, index: number) => ({
+      name: `${index + 1}. ${market.name}`,
+      value: market.publicKey,
+    }));
+
+    const { selectedMarketPublicKey } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'selectedMarketPublicKey',
+        message: 'Select a market to use:',
+        choices: marketChoices,
+      },
+    ]);
+
+    // **Set the selected POOL_PUBLIC_KEY in config**
+    config['poolPublicKey'] = selectedMarketPublicKey;
+    console.log(`Selected Pool Public Key: ${config['poolPublicKey']}`);
+
     // Create DLMMClient instance
     const client = new DLMMClient(config);
     console.log('DLMMClient instance created.');
 
     // Define the DLMM pool's public key
-    const poolPublicKey = new PublicKey(config.poolPublicKey);
+    const poolPublicKey = new PublicKey(config['poolPublicKey']);
 
     // Initialize the DLMM Pool
     await client.initializeDLMMPool(poolPublicKey);
