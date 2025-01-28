@@ -1,7 +1,6 @@
 import { Config } from './models/Config';
 import { DLMMClient } from './utils/DLMMClient';
-import { PositionManager } from './PositionManager';
-import { PublicKey } from '@solana/web3.js';
+import { PublicKey, SendTransactionError } from '@solana/web3.js';
 import { PositionStorage } from './utils/PositionStorage';
 import BN from 'bn.js';
 import DLMM, { StrategyType, StrategyParameters } from '@meteora-ag/dlmm';
@@ -40,6 +39,21 @@ import * as path from 'path';
       },
     ]);
 
+    // **Prompt user for the dollar amount they want to use**
+    const { userDollarAmount } = await inquirer.prompt([
+      {
+        type: 'number',
+        name: 'userDollarAmount',
+        message: 'Enter the dollar amount you want to use:',
+        validate: (value: number) => {
+          if (value > 0) {
+            return true;
+          }
+          return 'Please enter a valid amount greater than 0.';
+        }
+      },
+    ]);
+
     // **Set the selected POOL_PUBLIC_KEY in config**
     config['poolPublicKey'] = selectedMarketPublicKey;
     console.log(`Selected Pool Public Key: ${config['poolPublicKey']}`);
@@ -63,6 +77,9 @@ import * as path from 'path';
     const currentPrice = activeBin.price;
     console.log(`Fetched Price: ${currentPrice}`);
 
+    const currentActiveBinId = activeBin.binId;
+    console.log(`Fetched Price: ${currentActiveBinId}`);
+
     // Get binStep using the new method
     const binStep = client.getBinStep();
     console.log(`Fetched binStep: ${binStep}`);
@@ -71,46 +88,26 @@ import * as path from 'path';
     const positionStorage = new PositionStorage(config);
     console.log('PositionStorage instance created.');
 
-    // Prompt user to select a risk case
-    const priceSpread = await RiskManager.promptUserForRiskCase();
-
-    // Calculate bin parameters based on the selected risk case
-    const { lowerPrice, upperPrice } = RiskManager.calculateBinParameters(currentPrice, priceSpread);
-
-    console.log(`Calculated Bin Parameters:`);
-    console.log(`Lower Price: $${lowerPrice.toFixed(2)}`);
-    console.log(`Upper Price: $${upperPrice.toFixed(2)}`);
-
-    // Calculate bin IDs using RiskManager and the fetched binStep
-    const { lowerBinId, upperBinId } = RiskManager.calculateBinIds(lowerPrice, upperPrice, binStep);
-
-    console.log(`Calculated Bin IDs:`);
-    console.log(`Lower Bin ID: ${lowerBinId}`);
-    console.log(`Upper Bin ID: ${upperBinId}`);
-
-    // **Prompt User for Bin Steps**
-    const binStepsAnswer = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'binSteps',
-        message: 'Input Bin Steps (leave empty to use default from config):',
-        validate: (input: string) => {
-          if (input === '') return true;
-          const parsed = parseInt(input, 10);
-          return (!isNaN(parsed) && parsed > 0) || 'Please enter a valid positive number';
-        },
-      },
-    ]);
 
     let totalRangeInterval: number;
-    if (binStepsAnswer.binSteps !== '') {
-      const binSteps = parseInt(binStepsAnswer.binSteps, 10);
-      totalRangeInterval = Math.floor(binSteps / 2);
-    } else {
-      totalRangeInterval = config.totalRangeInterval;
-    }
+    const bins = 66;
+    totalRangeInterval = Math.floor(bins / 2);
+
+    const minBinId = currentActiveBinId - totalRangeInterval;
+    const maxBinId = currentActiveBinId + totalRangeInterval;
+
 
     console.log(`Using Total Range Interval: ${totalRangeInterval}`);
+
+
+    // Proceed to create the position without totalYAmount
+    const strategy: StrategyParameters = {
+      minBinId,
+      maxBinId,
+      strategyType: StrategyType.SpotBalanced, // Use the enum value
+      singleSidedX: false, // Set based on your strategy
+    };
+
 
     // Ensure Pool is Synced Before Creating a Position
     if (await client.canSyncWithMarketPrice(currentPrice)) {
@@ -118,21 +115,13 @@ import * as path from 'path';
       console.log('Pool synchronized before creating position.');
     }
 
-    // Proceed to create the position without totalYAmount
-    const strategy: StrategyParameters = {
-      minBinId: lowerBinId,
-      maxBinId: upperBinId,
-      strategyType: StrategyType.SpotBalanced, // Use the enum value
-      singleSidedX: false, // Set based on your strategy
-    };
-
     // Create new Position
-    const totalXAmount = new BN(config.totalXAmount);
+
     const strategyType = StrategyType.SpotBalanced;
 
     // New pubkey for position
     const positionPubKey: PublicKey = await client.createPosition(
-      totalXAmount,
+      userDollarAmount,
       strategyType,
       strategy
     );
@@ -147,23 +136,29 @@ import * as path from 'path';
     console.log(`Stored bin ranges for position ${positionPubKey.toBase58()}`);
 
     // **Create PositionManager Instance with totalRangeInterval**
-    const positionManager = new PositionManager(
-      client,
-      config,
-      positionStorage,
-      totalRangeInterval
-    );
-    console.log('PositionManager instance created.');
+   // const positionManager = new PositionManager(
+    //  client,
+     //config,
+     // positionStorage,
+     // totalRangeInterval
+   // );
+   // console.log('PositionManager instance created.');
 
     // Ensure Associated Token Accounts exist
-    await client.ensureATAs();
-    console.log('ATA (Associated Token Accounts) ensured.');
+   // await client.ensureATAs();
+  //  console.log('ATA (Associated Token Accounts) ensured.');
 
     // Manage Positions Based on Market Conditions
-    await positionManager.managePositions();
-    console.log('Position management executed.');
+  //  await positionManager.managePositions();
+   // console.log('Position management executed.');
 
   } catch (error: any) {
-    console.error('Error running DLMMClient:', error.message || error);
+    if (error instanceof SendTransactionError) {
+      console.error('Error creating position: Simulation failed.');
+      console.error('Message:', error.message);
+      console.error('Transaction Logs:', error.logs || 'No logs available');
+    } else {
+      console.error('Error running DLMMClient:', error.message || error);
+    }
   }
 })();

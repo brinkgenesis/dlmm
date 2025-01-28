@@ -11,6 +11,12 @@ import {
 import { SendTransactionError } from '@solana/web3.js';
 import { formatBN } from './formatBN';
 import Decimal from 'decimal.js';
+import { addOrModifyPriorityFees } from './transactionHelpers';
+import {FetchPrice} from './fetch_price'
+import dotenv from 'dotenv';
+
+
+dotenv.config();
 
 /**
  * Represents a user's position.
@@ -56,6 +62,7 @@ interface PositionBinData {
 export class DLMMClient {
   private dlmmPool?: DLMM;
   private config: Config;
+  private connection: Connection;
 
   /**
    * Constructs a new DLMMClient instance.
@@ -63,6 +70,7 @@ export class DLMMClient {
    */
   constructor(config: Config) {
     this.config = config;
+    this.connection = config.connection;
   }
 
   /**
@@ -306,6 +314,7 @@ export class DLMMClient {
 
   /**
    * Creates a new liquidity position within the DLMM pool.
+   * @param userDollarAmount 
    * @param totalXAmount - The total amount of Token X to add to the liquidity pool.
    * @param strategyType - The strategy type to use for adding liquidity.
    * @param strategy - Strategy parameters including minBinId and maxBinId.
@@ -313,10 +322,9 @@ export class DLMMClient {
    * @returns The public key of the created position.
    */
   public async createPosition(
-    totalXAmount: BN,
+    userDollarAmount: number,
     strategyType: StrategyType,
     strategy: StrategyParameters,
-    totalYAmount?: BN
   ): Promise<PublicKey> {
     if (!this.dlmmPool) {
       throw new Error('DLMM Pool is not initialized. Call initializeDLMMPool() first.');
@@ -325,30 +333,32 @@ export class DLMMClient {
     try {
       console.log('--- Initiating createPosition ---');
       console.log('Strategy Type:', strategyType);
+      // Get the active bin
+      const activeBin = await this.dlmmPool.getActiveBin();
+      console.log('Active Bin:', activeBin);
 
-      // If totalYAmount is not provided, calculate it
-      if (!totalYAmount) {
-        // Fetch Active Bin Info
-        const activeBin = await this.getActiveBin();
-        console.log('Active Bin:', activeBin);
-        console.log(`Active Bin Price per Token: ${activeBin.price}`);
+    // Assume you get the current price of the token pair from an API or other source
+      const activeBinPrice = activeBin.price;
+      console.log(`Fetched Price: ${activeBinPrice}`);
 
-        // Convert totalXAmount to Decimal for calculations
-        const totalXAmountDecimal = new Decimal(totalXAmount.toString());
+    // Get binStep using the new method
+      const binStep = this.getBinStep();
+      console.log(`Fetched binStep: ${binStep}`);
 
-        // Get the market price as Decimal
-        const activeBinPrice = new Decimal(activeBin.price.toString());
+      const SolPrice = await FetchPrice(process.env.SOL_Price_ID as string);
 
-        // Calculate totalYAmount
-        const totalYAmountDecimal = totalXAmountDecimal.mul(activeBinPrice);
+      const activeBinPriceNumber = parseFloat(activeBinPrice);
+      const SolPriceNumber = parseFloat(SolPrice);
+      console.log(`Fetched current Solana Price: ${SolPrice}`);
 
-        // Convert totalYAmount back to BN
-        totalYAmount = new BN(totalYAmountDecimal.toFixed(0, Decimal.ROUND_DOWN));
+      const {totalXAmount, totalYAmount} = calculateTokenAmounts(userDollarAmount, activeBinPriceNumber, SolPriceNumber)
+    
 
-        console.log(`Calculated Total Y Amount: ${totalYAmount.toString()}`);
-      } else {
-        console.log(`Using provided Total Y Amount: ${totalYAmount.toString()}`);
-      }
+      console.log(`Calculated Total X Amount: ${totalXAmount.toString()}`);
+      console.log(`Calculated Total Y Amount: ${totalYAmount.toString()}`);
+
+      console.log(`Using provided Total Y Amount: ${totalYAmount.toString()}`);
+ 
 
       // Generate new Keypair for the position
       const positionKeypair = Keypair.generate();
@@ -364,6 +374,23 @@ export class DLMMClient {
         strategy: strategy,
         user: this.config.walletKeypair.publicKey,
       });
+
+      console.log('Adding compute budget instructions');
+    
+
+      const addPriorityFee = ComputeBudgetProgram.setComputeUnitPrice({
+        microLamports: 50000,
+      });
+      // Add compute budget instructions to the transaction
+      transaction.add(addPriorityFee);
+
+      // Fetch the latest blockhash and block height
+      const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('finalized');
+
+       // Set the recentBlockhash and lastValidBlockHeight
+      transaction.recentBlockhash = blockhash;
+      transaction.lastValidBlockHeight = lastValidBlockHeight;
+    
 
       // Signers for the transaction
       const signers: Signer[] = [this.config.walletKeypair, positionKeypair];
@@ -719,3 +746,36 @@ if (require.main === module) {
   })();
 }
 
+export function calculateTokenAmounts(
+  userDollarAmount: number,
+  activeBinPrice: number,
+  SolPrice: number
+): {
+  totalXAmount: BN;
+  totalYAmount: BN;
+} {
+  // 1) Split USD in half for X and Y
+  const amountForX = userDollarAmount / 2; // e.g., $5 if userDollarAmount = 10
+  const amountForY = userDollarAmount / 2;
+
+  // 2) Convert "amountForX" USD into SOL by dividing by solPriceInUSD
+  //    (if SOL is $20, then $5 / $20 = 0.25 SOL)
+  const decimalXInSOL = new Decimal(amountForX).div(SolPrice);
+
+  // 3) Convert that SOL into Token X using activeBinPrice
+  //    (if activeBinPrice = 0.002 SOL per X, then
+  //     X = SOL / (SOL per X) = decimalXInSOL / activeBinPrice)
+  const decimalX = decimalXInSOL.div(new Decimal(activeBinPrice));
+
+  // 4) Convert X amount into BN (round down)
+  const totalXAmount = new BN(decimalX.toFixed(0, Decimal.ROUND_DOWN));
+
+  // 5) Convert "amountForY" USD directly into SOL (since Y = SOL)
+  //    (similarly, $5 / $20 = 0.25 SOL)
+  const decimalY = new Decimal(amountForY).div(SolPrice);
+
+  // 6) Convert Y amount into BN (round down)
+  const totalYAmount = new BN(decimalY.toFixed(0, Decimal.ROUND_DOWN));
+
+  return { totalXAmount, totalYAmount };
+}
