@@ -9,6 +9,7 @@ import { RiskManager } from './RiskManager';
 import inquirer from 'inquirer';
 import * as fs from 'fs';
 import * as path from 'path';
+import { calculateTokenAmounts } from './utils/calculateAmounts';
 
 /**
  * Main execution block
