@@ -55,6 +55,19 @@ import { calculateTokenAmounts } from './utils/calculateAmounts';
       },
     ]);
 
+    // Prompt user for strategy type
+    const { strategyOption } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'strategyOption',
+        message: 'Which strategy would you like to use?',
+        choices: [
+          { name: 'Spot Balanced', value: 'spotBalanced' },
+          { name: 'Single Sided (BidAskImBalanced)', value: 'singleSide' },
+        ],
+      },
+    ]);
+
     // **Set the selected POOL_PUBLIC_KEY in config**
     config['poolPublicKey'] = selectedMarketPublicKey;
     console.log(`Selected Pool Public Key: ${config['poolPublicKey']}`);
@@ -72,69 +85,51 @@ import { calculateTokenAmounts } from './utils/calculateAmounts';
 
     // Get the active bin
     const activeBin = await client.getActiveBin();
-    console.log('Active Bin:', activeBin);
+
 
     // Assume you get the current price of the token pair from an API or other source
-    const currentPrice = activeBin.price;
-    console.log(`Fetched Price: ${currentPrice}`);
-
-    const currentActiveBinId = activeBin.binId;
-    console.log(`Fetched Price: ${currentActiveBinId}`);
-
-    // Get binStep using the new method
-    const binStep = client.getBinStep();
-    console.log(`Fetched binStep: ${binStep}`);
 
     // Initialize PositionStorage
     const positionStorage = new PositionStorage(config);
     console.log('PositionStorage instance created.');
 
-
-    let totalRangeInterval: number;
-    const bins = 66;
-    totalRangeInterval = Math.floor(bins / 2);
-
-    const minBinId = currentActiveBinId - totalRangeInterval;
-    const maxBinId = currentActiveBinId + totalRangeInterval;
-
-
-    console.log(`Using Total Range Interval: ${totalRangeInterval}`);
-
-
-    // Proceed to create the position without totalYAmount
-    const strategy: StrategyParameters = {
-      minBinId,
-      maxBinId,
-      strategyType: StrategyType.SpotBalanced, // Use the enum value
-      singleSidedX: false, // Set based on your strategy
-    };
-
-
-    // Ensure Pool is Synced Before Creating a Position
-    if (await client.canSyncWithMarketPrice(currentPrice)) {
-      await client.syncWithMarketPrice(currentPrice);
-      console.log('Pool synchronized before creating position.');
-    }
+  
 
     // Create new Position
-
-    const strategyType = StrategyType.SpotBalanced;
-
-    // New pubkey for position
-    const positionPubKey: PublicKey = await client.createPosition(
-      userDollarAmount,
-      strategyType,
-      strategy
-    );
-    console.log(`Position created with Public Key: ${positionPubKey.toBase58()}`);
-
-    // Store the position's bin ranges using strategy parameters
-    positionStorage.addPosition(positionPubKey, {
-      originalActiveBin: activeBin.binId,
-      minBinId: strategy.minBinId,
-      maxBinId: strategy.maxBinId,
-    });
-    console.log(`Stored bin ranges for position ${positionPubKey.toBase58()}`);
+    
+    if (strategyOption === 'spotBalanced') {
+      const { positionPubKey, minBinId, maxBinId } = await client.createPosition(userDollarAmount);
+      console.log(`Spot Balanced Position Created: ${positionPubKey.toBase58()}`);
+      positionStorage.addPosition(positionPubKey,{
+        originalActiveBin: activeBin.binId,
+        minBinId,
+        maxBinId,
+      });
+    } else {
+      const { singleSideChoice } = await inquirer.prompt([
+        {
+          type: 'list',
+          name: 'singleSideChoice',
+          message: 'Which token do you want to use for the single-sided position?',
+          choices: [
+            { name: 'Token X', value: true },
+            { name: 'Token Y (Sol)', value: false },
+          ],
+        },
+      ]);
+      const singleSidedX = singleSideChoice;
+      const { positionPubKey, minBinId, maxBinId } = await client.createSingleSidePosition(
+        userDollarAmount,
+        singleSidedX
+      );
+      console.log(`Single Sided Position Created: ${positionPubKey.toBase58()}`);
+      positionStorage.addPosition(positionPubKey,{
+        originalActiveBin: activeBin.binId,
+        minBinId,
+        maxBinId,
+      });
+    }
+  
 
     // **Create PositionManager Instance with totalRangeInterval**
    // const positionManager = new PositionManager(

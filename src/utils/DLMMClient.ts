@@ -323,24 +323,22 @@ export class DLMMClient {
    * @returns The public key of the created position.
    */
   public async createPosition(
-    userDollarAmount: number,
-    strategyType: StrategyType,
-    strategy: StrategyParameters,
-  ): Promise<PublicKey> {
+    userDollarAmount: number
+  ): Promise<{ positionPubKey: PublicKey; minBinId: number; maxBinId: number }> {
     if (!this.dlmmPool) {
       throw new Error('DLMM Pool is not initialized. Call initializeDLMMPool() first.');
     }
 
     try {
-      console.log('--- Initiating createPosition ---');
-      console.log('Strategy Type:', strategyType);
+      console.log('--- Creating Spot Position ---');
       // Get the active bin
       const activeBin = await this.dlmmPool.getActiveBin();
       console.log('Active Bin:', activeBin);
 
     // Assume you get the current price of the token pair from an API or other source
       const activeBinPrice = activeBin.price;
-      console.log(`Fetched Price: ${activeBinPrice}`);
+      console.log(`Fetched Price: $${activeBinPrice}`);
+      const activeBinPriceNumber = parseFloat(activeBinPrice);
 
     // Get binStep using the new method
       const binStep = this.getBinStep();
@@ -348,9 +346,28 @@ export class DLMMClient {
 
       const SolPrice = await FetchPrice(process.env.SOL_Price_ID as string);
 
-      const activeBinPriceNumber = parseFloat(activeBinPrice);
+      
       const SolPriceNumber = parseFloat(SolPrice);
-      console.log(`Fetched current Solana Price: ${SolPrice}`);
+      console.log(`Fetched current Solana Price: $${SolPrice}`);
+
+      const currentActiveBinId = activeBin.binId;
+      console.log(`Fetched Price: ${currentActiveBinId}`);
+
+      let totalRangeInterval: number;
+      const bins = 66;
+      totalRangeInterval = Math.floor(bins / 2);
+
+      const minBinId = currentActiveBinId - totalRangeInterval;
+      const maxBinId = currentActiveBinId + totalRangeInterval;
+
+      console.log(`Using Total Range Interval: ${totalRangeInterval}`);
+
+      const strategy: StrategyParameters = {
+        strategyType: StrategyType.SpotBalanced,
+        singleSidedX: false, 
+        minBinId,
+        maxBinId,
+      };
 
       const {totalXAmount, totalYAmount} = calculateTokenAmounts(userDollarAmount, activeBinPriceNumber, SolPriceNumber,9,9)
     
@@ -360,7 +377,11 @@ export class DLMMClient {
 
       console.log(`Using provided Total Y Amount: ${totalYAmount.toString()}`);
  
-
+              // Ensure Pool is Synced Before Creating a Position
+      if (await this.canSyncWithMarketPrice(activeBinPriceNumber)) {
+        await this.syncWithMarketPrice(activeBinPriceNumber);
+        console.log('Pool synchronized before creating position.');
+}
       // Generate new Keypair for the position
       const positionKeypair = Keypair.generate();
       const positionPubKey = positionKeypair.publicKey;
@@ -411,7 +432,11 @@ export class DLMMClient {
       console.log(`Position created successfully with signature: ${signature}`);
       console.log(`Position Public Key: ${positionPubKey.toBase58()}`);
 
-      return positionPubKey;
+      return {
+        positionPubKey,
+        minBinId,
+        maxBinId,
+      };
     } catch (error: any) {
       console.error('Error creating position:', error.message || error);
       throw error;
@@ -736,16 +761,19 @@ export class DLMMClient {
   public async createSingleSidePosition(
     userDollarAmount: number,
     singleSidedX: boolean
-  ): Promise<PublicKey> {
+  ): Promise<{ positionPubKey: PublicKey; minBinId: number; maxBinId: number }> {
     if (!this.dlmmPool) {
       throw new Error('DLMM Pool is not initialized. Call initializeDLMMPool() first.');
     }
 
-
+  
     // Fetch current bin info
-    const activeBin = await this.getActiveBin();
+    const activeBin = await this.dlmmPool.getActiveBin();
     const currentActiveBinId = activeBin.binId; 
     const totalRangeInterval = 69;
+    const currentPrice = parseFloat(activeBin.pricePerToken);
+    console.log(`Fetched Price: $${currentPrice}`);
+    
 
     // Compute minBinId and maxBinId
     let minBinId = currentActiveBinId;
@@ -773,7 +801,7 @@ export class DLMMClient {
     let totalYAmount: BN;
     if (singleSidedX) {
       // Use activeBin.price for X
-      const xTokens = userDollarAmount / Number(activeBin.price); // Convert to numeric
+      const xTokens = userDollarAmount / parseFloat(activeBin.pricePerToken); // Convert to numeric
       totalXAmount = new BN(Math.round(xTokens * 1e9)); // Example lamport conversion
       totalYAmount = new BN(0);
     } else {
@@ -788,14 +816,20 @@ export class DLMMClient {
       totalXAmount = new BN(0);
     }
 
+        // Ensure Pool is Synced Before Creating a Position
+    if (await this.canSyncWithMarketPrice(currentPrice)) {
+          await this.syncWithMarketPrice(currentPrice);
+          console.log('Pool synchronized before creating position.');
+    }
+
       // Generate new Keypair for the position
-      const positionKeypair = Keypair.generate();
-      const positionPubKey = positionKeypair.publicKey;
+    const positionKeypair = Keypair.generate();
+    const positionPubKey = positionKeypair.publicKey;
 
       // Use the strategy parameters provided
       console.log('Creating position with strategy parameters.');
 
-      const transaction = await this.dlmmPool.initializePositionAndAddLiquidityByStrategy({
+        const transaction = await this.dlmmPool.initializePositionAndAddLiquidityByStrategy({
         positionPubKey: positionPubKey,
         totalXAmount: totalXAmount,
         totalYAmount: totalYAmount,
@@ -838,7 +872,11 @@ export class DLMMClient {
       console.log(`Position created successfully with signature: ${signature}`);
       console.log(`Position Public Key: ${positionPubKey.toBase58()}`);
 
-      return positionPubKey;
+      return {
+        positionPubKey,
+        minBinId,
+        maxBinId,
+      };
     } catch (error: any) {
       console.error('Error creating position:', error.message || error);
       throw error;
