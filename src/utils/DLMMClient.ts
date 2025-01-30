@@ -313,6 +313,44 @@ export class DLMMClient {
     }
   }
 
+  private async sendTransactionWithBackoff(
+    transaction: Transaction,
+    signers: Signer[],
+    maxRetries = 3
+  ): Promise<string> {
+    let attempt = 0;
+    let delay = 500; // initial delay in ms
+    while (attempt < maxRetries) {
+      try {
+        const signature = await sendAndConfirmTransaction(
+          this.config.connection,
+          transaction,
+          signers,
+          {
+            skipPreflight: false,
+            preflightCommitment: 'confirmed',
+            commitment: 'finalized',
+          }
+        );
+        return signature; // If successful, return immediately
+      } catch (error: any) {
+        // Check if it's a blockhash/expiration error
+        const msg = error?.message?.toLowerCase() || '';
+        if (msg.includes('blockhash') || msg.includes('expired')) {
+          // Exponential backoff
+          console.warn(`Retry #${attempt + 1} due to blockhash expiration. Waiting ${delay}ms...`);
+          await new Promise((res) => setTimeout(res, delay));
+          delay *= 2;
+        } else {
+          // Rethrow other errors
+          throw error;
+        }
+      }
+      attempt++;
+    }
+    throw new Error(`Failed after ${maxRetries} retries due to blockhash expiration or related errors.`);
+  }
+
   /**
    * Creates a new liquidity position within the DLMM pool.
    * @param userDollarAmount 
@@ -418,15 +456,10 @@ export class DLMMClient {
       const signers: Signer[] = [this.config.walletKeypair, positionKeypair];
 
       // Send and confirm the transaction
-      const signature = await sendAndConfirmTransaction(
-        this.config.connection,
+      const signature = await this.sendTransactionWithBackoff(
         transaction,
         signers,
-        {
-          skipPreflight: false,
-          preflightCommitment: 'confirmed',
-          commitment: 'finalized',
-        }
+        3
       );
       console.log(`Transaction Signature: ${signature}`);
       console.log(`Position created successfully with signature: ${signature}`);
@@ -766,7 +799,6 @@ export class DLMMClient {
       throw new Error('DLMM Pool is not initialized. Call initializeDLMMPool() first.');
     }
 
-  
     // Fetch current bin info
     const activeBin = await this.dlmmPool.getActiveBin();
     const currentActiveBinId = activeBin.binId; 
@@ -858,15 +890,10 @@ export class DLMMClient {
       const signers: Signer[] = [this.config.walletKeypair, positionKeypair];
 
       // Send and confirm the transaction
-      const signature = await sendAndConfirmTransaction(
-        this.config.connection,
+      const signature = await this.sendTransactionWithBackoff(
         transaction,
         signers,
-        {
-          skipPreflight: false,
-          preflightCommitment: 'confirmed',
-          commitment: 'finalized',
-        }
+        3
       );
       console.log(`Transaction Signature: ${signature}`);
       console.log(`Position created successfully with signature: ${signature}`);
@@ -881,8 +908,8 @@ export class DLMMClient {
       console.error('Error creating position:', error.message || error);
       throw error;
     }
+  }
 
-}
 
 
 
