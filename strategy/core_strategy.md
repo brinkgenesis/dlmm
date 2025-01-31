@@ -154,3 +154,179 @@
 2. [DLMM Strategy Playbook](https://thewise.trade/dlmm-guide-multidays)
 3. [Volatility Accumulator Model](https://docs.meteora.ag/dlmm/strategies-and-use-cases)
 
+
+**Implementation**:
+```typescript:src/utils/DLMMClient.ts
+// Link to existing position creation logic
+startLine: 363
+endLine: 477
+
+// Suggested enhancement for dynamic sizing:
+public async createPosition(userDollarAmount: number, confidenceScore: number) {
+  const baseSize = userDollarAmount * (0.2 + 0.8 * confidenceScore);
+  const {totalXAmount, totalYAmount} = calculateTokenAmounts(
+    baseSize,
+    activeBinPrice,
+    SolPrice,
+    9,
+    9
+  );
+  // Existing position creation logic
+}
+```
+To do: Create a new file called confidence_score.ts and a function called calculateConfidenceScore that returns confidenceScore. This enables dynamic sizing for positions. Before the confidenceScore calculations are properly done, just default confidenceScore to 1 so that the createPosition function will run normally. 
+
+### 1.2 Basic Risk Parameters
+**Circuit Breaker Implementation**:
+```typescript:src/utils/DLMMClient.ts
+// Add pre-transaction checks
+startLine: 363
+endLine: 477
+
+async managePosition() {
+  // Add before transaction execution
+  if (await this.riskManager.checkDrawdown(15)) {
+    this.adjustPositionSize(0.5);
+  }
+  if (await this.riskManager.checkVolumeDrop()) {
+    await this.closeAllPositions();
+  }
+}
+```
+To do: Inside riskManager.ts add the checkDrawdown, adjustPositionSize, checkVolumeDrop and closeAllPositions functions.
+
+
+## 2. Data Layer Integration (Weeks 5-7)
+### 2.1 Oracle Price Integration
+```typescript:src/utils/DLMMClient.ts
+// Enhance price fetching
+startLine: 794
+endLine: 899
+
+// Modify existing price fetch:
+const SolPrice = await this.oracle.getPrice('SOL');
+const volatilityScore = await this.volatilityOracle.getScore(poolAddress);
+```
+
+### 2.2 Historical Backtesting
+```typescript
+// New backtest module
+export class Backtester {
+  async run(scenario: BacktestScenario) {
+    const historicalData = await this.loadData(scenario.pool);
+    const results = await this.simulateTrades(
+      historicalData,
+      scenario.strategy
+    );
+    return this.generateReport(results);
+  }
+}
+```
+
+## 3. Optimization Phase (Weeks 8-9)
+### 3.1 Fee Modeling Engine
+```typescript:src/utils/DLMMClient.ts
+// Enhance transaction sending
+startLine: 316
+endLine: 352
+
+private async sendTransactionWithBackoff(transaction: Transaction, signers: Signer[]) {
+  const fee = this.feeModel.calculateOptimalFee();
+  transaction.add(ComputeBudgetProgram.setComputeUnitPrice({ 
+    microLamports: fee 
+  }));
+  // Existing retry logic
+}
+```
+
+### 3.2 MEV Protection
+```typescript
+// New MEV protection class
+export class MEVShield {
+  constructor(private connection: Connection) {}
+
+  async bundleTransactions(txs: Transaction[]) {
+    const blockhash = await this.connection.getLatestBlockhash();
+    return txs.map(tx => {
+      tx.recentBlockhash = blockhash.blockhash;
+      return tx;
+    });
+  }
+}
+```
+
+## 4. Expansion Phase (Weeks 10-12)
+### 4.1 Cross-Pool Arbitrage
+```typescript
+// New arbitrage detector
+export class ArbitrageEngine {
+  async findOpportunities() {
+    const pools = await this.poolScanner.findMatchingPools();
+    return this.arbitrageMath.calculateSpread(pools);
+  }
+}
+```
+
+# Updated Core Strategy Additions
+
+## Dynamic Fee Adaptation Implementation
+
+# Updated Core Strategy Additions
+
+## Dynamic Fee Adaptation Implementation
+
+// Volatility-based fee adjustment
+export class FeeModel {
+calculateOptimalFee(volatilityScore: number): number {
+const baseFee = 30000; // 0.3%
+return baseFee + (volatilityScore 5000);
+}
+}
+
+## Social Sentiment Integration
+```typescript
+// Sentiment-aware position sizing
+export class SentimentAdapter {
+  async adjustPosition(sentimentScore: number, position: Position) {
+    if (sentimentScore < 0.4) {
+      return position.reduce(0.75);
+    }
+    return position;
+  }
+}
+```
+
+## Liquidity Cycling Implementation
+```typescript
+// Market phase detection
+export class MarketPhaseDetector {
+  async determinePhase(poolAddress: string): Promise<MarketPhase> {
+    const bbWidth = await this.calculateBBWidth(poolAddress);
+    const rsi = await this.getRSI(poolAddress);
+    
+    if (bbWidth < 0.1) return 'ACCUMULATION';
+    if (rsi > 85) return 'DISTRIBUTION';
+    return 'NORMAL';
+  }
+}
+```
+
+## Implementation Checklist
+
+| Priority | Task                          | Code Reference              | Status |
+|----------|-------------------------------|-----------------------------|--------|
+| P0       | Position Creation Engine      | DLMMClient.ts (363-477)     | ✅      |
+| P0       | Transaction Retry Logic       | DLMMClient.ts (316-352)     | ✅      |
+| P1       | Dynamic Fee Model              | FeeModel.ts (New)           | ⏳      |
+| P1       | Volatility Oracle Integration | OracleService.ts (New)     | ⏳      |
+| P2       | MEV Protection Layer          | MEVShield.ts (New)          | ❌      |
+| P2       | Arbitrage Detection           | ArbitrageEngine.ts (New)    | ❌      |
+
+**Legend**:
+- ✅ Implemented
+- ⏳ In Progress
+- ❌ Not Started
+
+This plan directly connects strategic requirements with concrete implementation patterns from your codebase while maintaining alignment with the PRD objectives. Each component can be developed incrementally while maintaining system stability.
+
+
