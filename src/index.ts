@@ -5,7 +5,6 @@ import { PositionStorage } from './utils/PositionStorage';
 import BN from 'bn.js';
 import DLMM, { StrategyType, StrategyParameters } from '@meteora-ag/dlmm';
 import { formatBN } from './utils/formatBN';
-import { RiskManager } from './RiskManager';
 import inquirer from 'inquirer';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -104,6 +103,7 @@ import { calculateTokenAmounts } from './utils/calculateAmounts';
         originalActiveBin: activeBin.binId,
         minBinId,
         maxBinId,
+        snapshotPositionValue: userDollarAmount
       });
     } else {
       const { singleSideChoice } = await inquirer.prompt([
@@ -127,6 +127,7 @@ import { calculateTokenAmounts } from './utils/calculateAmounts';
         originalActiveBin: activeBin.binId,
         minBinId,
         maxBinId,
+        snapshotPositionValue: userDollarAmount
       });
     }
   

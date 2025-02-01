@@ -7,6 +7,7 @@ interface PositionRange {
   originalActiveBin: number;
   minBinId: number;
   maxBinId: number;
+  snapshotPositionValue: number;
 }
 
 interface PositionsMapping {

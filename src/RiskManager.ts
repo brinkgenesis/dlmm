@@ -1,121 +1,106 @@
-/**
- * RiskManager class handles the risk settings and bin parameter calculations based on user input.
- */
-
-import readline from 'readline';
+import { DLMMClient } from './utils/DLMMClient';
+import { Connection, PublicKey } from '@solana/web3.js';
+import { fetchTokenMetrics } from './utils/token_data';
+import { PositionSnapshotService } from './utils/positionSnapshot';
 import DLMM from '@meteora-ag/dlmm';
+import { FetchPrice } from './utils/fetch_price';
 
-/**
- * Represents a price spread with upper and lower percentage bounds.
- */
-interface PriceSpread {
-  upperPercentage: number;
-  lowerPercentage: number;
-}
-
-/**
- * Enum for the different risk cases.
- */
-enum RiskCase {
-  High = 'High Risk (+15% / -15%)',
-  Medium = 'Medium Risk (+10% / -10%)',
-  Low = 'Low Risk (+5% / -5%)',
-}
-
-/**
- * RiskManager class provides methods to prompt user input and calculate bin parameters.
- */
 export class RiskManager {
-  /**
-   * Map of risk cases to their corresponding price spreads.
-   */
-  private static riskCases: { [key: string]: PriceSpread } = {
-    High: { upperPercentage: 0.15, lowerPercentage: 0.15 },
-    Medium: { upperPercentage: 0.10, lowerPercentage: 0.10 },
-    Low: { upperPercentage: 0.05, lowerPercentage: 0.05 },
-  };
+  private snapshotService = new PositionSnapshotService();
 
-  /**
-   * Prompts the user to select a risk case and returns the corresponding price spread.
-   * @returns {Promise<PriceSpread>} The selected price spread.
-   */
-  public static async promptUserForRiskCase(): Promise<PriceSpread> {
-    return new Promise((resolve) => {
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      });
+  constructor(private dlmmClient: DLMMClient) {}
 
-      const options = Object.values(RiskCase);
-      console.log('\nPlease select a risk case:');
-      options.forEach((option, index) => {
-        console.log(`${index + 1}. ${option}`);
-      });
+  public async checkDrawdown(thresholdPercent: number): Promise<boolean> {
+    const positions = await this.dlmmClient.getUserPositions();
+    if (positions.length === 0) return false;
 
-      rl.question('\nEnter the number corresponding to your choice: (1,2, or 3) ', (answer) => {
-        const choice = parseInt(answer.trim(), 10);
-        if (choice >= 1 && choice <= options.length) {
-          const selectedRisk = options[choice - 1];
-          console.log(`\nYou have selected: ${selectedRisk}\n`);
-          let riskKey: keyof typeof RiskManager.riskCases;
+    // Calculate current USD value using the first user position
+    const currentValue = await this.calculatePositionValue(userPositions[0]);
 
-          switch (selectedRisk) {
-            case RiskCase.High:
-              riskKey = 'High';
-              break;
-            case RiskCase.Medium:
-              riskKey = 'Medium';
-              break;
-            case RiskCase.Low:
-              riskKey = 'Low';
-              break;
-            default:
-              riskKey = 'Medium'; // Default to Medium Risk if something goes wrong
-          }
+    // Use the pool's key (lbPair) for snapshot storage
+    const poolKeyStr = lbPair.toBase58();
 
-          rl.close();
-          resolve(RiskManager.riskCases[riskKey]);
-        } else {
-          console.log('\nInvalid choice. Please run the program again.\n');
-          rl.close();
-          process.exit(1);
-        }
-      });
-    });
+    await this.snapshotService.recordSnapshot(poolKeyStr, currentValue);
+    const peakValue = await this.snapshotService.getPeakValue(poolKeyStr);
+    if (peakValue === 0) return false;
+
+    const drawdown = ((peakValue - currentValue) / peakValue) * 100;
+    return drawdown >= thresholdPercent;
   }
 
-  /**
-   * Calculates the bin parameters based on the current price and selected price spread.
-   * @param currentPrice The current price of the token pair.
-   * @param priceSpread The selected price spread.
-   * @returns An object containing the lower and upper bin prices.
-   */
-  public static calculateBinParameters(
-    currentPrice: number,
-    priceSpread: PriceSpread
-  ): { lowerPrice: number; upperPrice: number } {
-    const lowerPrice = currentPrice * (1 - priceSpread.lowerPercentage);
-    const upperPrice = currentPrice * (1 + priceSpread.upperPercentage);
-
-    return { lowerPrice, upperPrice };
+  public async adjustPositionSize(bpsToRemove: number): Promise<void> {
+    const positions = await this.dlmmClient.getUserPositions();
+    if (!positions || positions.length === 0) return;
+    const position = positions[0];
+    const bins = position.positionData.positionBinData.map(bin => bin.binId);
+    const binIdsToRemove = this.getFullBinRange(bins);
+    await this.dlmmClient.removeLiquidity(
+      position.publicKey,
+      bpsToRemove,
+      binIdsToRemove,
+      false
+    );
   }
 
-  /**
-   * Calculates the bin IDs based on the price range and DLMM parameters.
-   * @param lowerPrice The lower bound price.
-   * @param upperPrice The upper bound price.
-   * @param binStep The bin step of the LP pair.
-   * @returns An object containing the lower and upper bin IDs.
-   */
-  public static calculateBinIds(
-    lowerPrice: number,
-    upperPrice: number,
-    binStep: number
-  ): { lowerBinId: number; upperBinId: number } {
-    // Calculate bin IDs
-    const lowerBinId = DLMM.getBinIdFromPrice(lowerPrice, binStep, true);  // Rounds down
-    const upperBinId = DLMM.getBinIdFromPrice(upperPrice, binStep, false); // Rounds up
+  public async checkVolumeDrop(threshold: number): Promise<boolean> {
+    const positions = await this.dlmmClient.getUserPositions();
+    if (!positions || positions.length === 0) return false;
+    const tokenMint = positions[0].tokenX.mint || this.dlmmClient.poolAddress.toBase58();
+    const metrics = await fetchTokenMetrics('solana', tokenMint);
+    const volumeMA = await this.calculateVolumeMA();
+    return metrics.volumeMcapRatio < volumeMA * threshold;
+  }
 
-    return { lowerBinId, upperBinId };
+  public async closeAllPositions(): Promise<void> {
+    const positions = await this.dlmmClient.getUserPositions();
+    if (!positions || positions.length === 0) return;
+    for (const position of positions) {
+      const bins = position.positionData.positionBinData.map(bin => bin.binId);
+      const binIdsToRemove = this.getFullBinRange(bins);
+      await this.dlmmClient.removeLiquidity(
+        position.publicKey,
+        10000,
+        binIdsToRemove,
+        true
+      );
+    }
+  }
+
+  private async calculateVolumeMA(): Promise<number> {
+    // Placeholder implementation for the 6-hour moving average.
+    return 0;
+  }
+
+  private async calculatePositionValue(positionInfo: any): Promise<number> {
+    const solPrice = await this.getSOLPrice();
+    const activeBin = await this.dlmmClient.getActiveBin();
+    // Assume token decimals are available on properties tokenX and tokenY; adjust as needed.
+    const xDecimals = positionInfo.tokenX ? positionInfo.tokenX.decimals : 9;
+    const yDecimals = positionInfo.tokenY ? positionInfo.tokenY.decimals : 9;
+    const pricePerToken = Number(activeBin.price) / Math.pow(10, xDecimals + yDecimals);
+
+    // Using total amounts from positionData; adapt if your structure differs.
+    const xAmount = Number(positionInfo.positionData.totalXAmount) / Math.pow(10, xDecimals);
+    const yAmount = Number(positionInfo.positionData.totalYAmount) / Math.pow(10, yDecimals);
+    const xValue = xAmount * pricePerToken;
+    const yValue = yAmount * solPrice;
+    return xValue + yValue;
+  }
+
+  private async getSOLPrice(): Promise<number> {
+    const solPriceStr = await FetchPrice(process.env.SOL_Price_ID as string);
+    const solPriceNumber = parseFloat(solPriceStr);
+    console.log(`Fetched current Solana Price: ${solPriceStr}`);
+    return solPriceNumber;
+  }
+
+  private getFullBinRange(bins: number[]): number[] {
+    const min = Math.min(...bins);
+    const max = Math.max(...bins);
+    const fullRange: number[] = [];
+    for (let i = min; i <= max; i++) {
+      fullRange.push(i);
+    }
+    return fullRange;
   }
 }

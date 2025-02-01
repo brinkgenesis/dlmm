@@ -564,95 +564,75 @@ export class DLMMClient {
   }
 
   /**
-   * Removes liquidity from an existing position within the DLMM pool.
-   * @param newBalancePosition - The public key of the balance position.
+   * Removes liquidity for the given position.
+   * @param positionPubKey - The public key of the user position.
+   * @param bpsToRemove - Basis points to remove (e.g. 10000 for 100% removal).
+   * @param binIdsToRemove - An array of bin ids (full range from minBinId to maxBinId).
+   * @param shouldClaimAndClose - If true, then liquidity is fully removed (and claims are executed).
    */
-  async removeLiquidity(newBalancePosition: PublicKey): Promise<void> {
+  async removeLiquidity(
+    positionPubKey: PublicKey,
+    bpsToRemove: number,
+    binIdsToRemove: number[],
+    shouldClaimAndClose: boolean = false
+  ): Promise<void> {
     try {
-      console.log('--- Initiating removeLiquidity ---');
-      console.log(`Position Public Key: ${newBalancePosition.toBase58()}`);
 
       if (!this.dlmmPool) {
         throw new Error('DLMM Pool is not initialized. Call initializeDLMMPool() first.');
       }
-
-      // Retrieve user positions
-      const userPublicKey = this.config.walletKeypair.publicKey;
-      const { userPositions } = await this.dlmmPool.getPositionsByUserAndLbPair(userPublicKey);
-      console.log('Retrieved User Positions:', userPositions);
-
-      // Find the specific position matching newBalancePosition
-      const userPosition = userPositions.find(({ publicKey }) => publicKey.equals(newBalancePosition));
-
-      if (!userPosition) {
-        console.log('No matching position found for the provided position public key.');
-        return;
-      }
-
-      console.log('Matched User Position:', userPosition);
-
-      // Extract binIds to remove liquidity from
-      const binIdsToRemove: number[] = userPosition.positionData.positionBinData.map(
-        (bin) => bin.binId
-      );
-
-      // Use bpsToRemove from Config
-      const bpsToRemove: BN = new BN(this.config.bpsToRemove);
-      console.log(`Basis Points to Remove: ${bpsToRemove.toString()}`);
-      console.log(`Should Claim and Close: true`);
-
-      // Create transaction instructions to remove liquidity
-      const removeLiquidityTxs = await this.dlmmPool.removeLiquidity({
+      console.log(`Initiating liquidity removal for position: ${positionPubKey.toBase58()}`);
+      
+      const bpsBN = new BN(bpsToRemove);
+      // Assuming DLMM provides an instruction generator called removeLiquidityInstruction
+      const removeLiquidityTxs = this.dlmmPool.removeLiquidity({
         user: this.config.walletKeypair.publicKey,
-        position: userPosition.publicKey,
+        position: positionPubKey,
         binIds: binIdsToRemove,
-        bps: bpsToRemove,
-        shouldClaimAndClose: true,
+        bps: bpsBN,
+        shouldClaimAndClose,
       });
+      
+       // Handle single or multiple transactions
+       const transactions = Array.isArray(removeLiquidityTxs)
+       ? removeLiquidityTxs
+       : [removeLiquidityTxs];
+     
+     console.log(`Number of Transactions to Send: ${transactions.length}`);
 
-      console.log('Initialized Transaction Instructions');
+     for (const [index, tx] of transactions.entries()) {
+       console.log(`--- Sending Transaction ${index + 1} of ${transactions.length} ---`);
 
-      // Handle multiple transactions if returned as an array
-      const transactions = Array.isArray(removeLiquidityTxs) ? removeLiquidityTxs : [removeLiquidityTxs];
-      console.log(`Number of Transactions to Send: ${transactions.length}`);
+       // Fetch latest blockhash and assign it as well as fee payer
+       const { blockhash } = await this.config.connection.getLatestBlockhash('finalized');
+       tx.recentBlockhash = blockhash;
+       tx.feePayer = this.config.walletKeypair.publicKey;
+       console.log('Assigned Blockhash and Fee Payer to Transaction');
 
-      for (const [index, tx] of transactions.entries()) {
-        console.log(`--- Sending Transaction ${index + 1} of ${transactions.length} ---`);
+       // Signers for the transaction: the wallet keypair
+       const signers: Signer[] = [this.config.walletKeypair];
+       console.log('Assigned Signers:', signers.map((s) => s.publicKey.toBase58()));
 
-        // Assign the recent blockhash and fee payer
-        const { blockhash } = await this.config.connection.getLatestBlockhash('finalized');
-        tx.recentBlockhash = blockhash;
-        tx.feePayer = this.config.walletKeypair.publicKey;
-        console.log('Assigned Blockhash and Fee Payer to Transaction');
-
-
-        // Signers for the transaction: the user
-        const signers: Signer[] = [this.config.walletKeypair];
-        console.log('Assigned Signers:', signers.map((s) => s.publicKey.toBase58()));
-
-        // Send and confirm the transaction
-        console.log(`Sending Transaction ${index + 1}...`);
-        const removeLiquidityTxHash: TransactionSignature = await sendAndConfirmTransaction(
-          this.config.connection,
-          tx,
-          signers,
-          {
-            skipPreflight: false,
-            preflightCommitment: 'confirmed',
-          }
-        );
-        console.log(`Transaction ${index + 1} Signature: ${removeLiquidityTxHash}`);
-        console.log(
-          `Liquidity removed successfully with signature: ${removeLiquidityTxHash}`
-        );
-      }
-
-      console.log('--- removeLiquidity Completed Successfully ---');
-    } catch (error: any) {
-      console.error('Error removing liquidity:', error.message || error);
-      console.log('--- removeLiquidity Encountered an Error ---');
-    }
-  }
+       // Send and confirm the transaction
+       console.log(`Sending Transaction ${index + 1}...`);
+       const removeLiquidityTxHash: string = await sendAndConfirmTransaction(
+         this.config.connection,
+         tx,
+         signers,
+         {
+           skipPreflight: false,
+           preflightCommitment: 'confirmed',
+         }
+       );
+       console.log(`Transaction ${index + 1} Signature: ${removeLiquidityTxHash}`);
+       console.log(
+         `Liquidity removed successfully with signature: ${removeLiquidityTxHash}`
+       );
+     }
+   } catch (error: any) {
+     console.error('Error removing liquidity:', error.message || error);
+   }
+ }
 
   /**
    * Closes a position within the DLMM pool.

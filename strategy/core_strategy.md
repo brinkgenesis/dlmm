@@ -128,24 +128,72 @@
 
 ## 6. Strategic Roadmap
 ### Phase 1: Core Engine (Weeks 1-4)
+| Priority | Task                          | Code Reference              | Status  |
+|----------|-------------------------------|-----------------------------|---------|
+| P0       | Position Creation Engine      | DLMMClient.ts (363-477)     | ✅       |
+| P0       | Transaction Retry Logic       | DLMMClient.ts (316-352)     | ✅       |
+| P1       | Confidence Score Calculation  | confidence_score.ts         | ✅       |
+| P1       | DexScreener Data Integration   | token_data.ts               | ✅       |
+
 - Position management system
 - Basic risk parameters
 - Single-sided strategy implementation
 
 ### Phase 2: Data Layer (Weeks 5-7)
-- Oracle price integration
-- Historical backtesting framework
-- Whale wallet tracking
+| Priority | Task                          | Code Reference              | Status  |
+|----------|-------------------------------|-----------------------------|---------|
+| P1       | Holder Distribution Analysis  | blockchain_analyzer.ts (New)| ❌      |
+| P1       | Volatility Data Pipeline       | volatility_oracle.ts (New) | ❌      |
+| P2       | Historical Backtesting         | Backtester.ts               | ⏳      |
 
 ### Phase 3: Optimization (Weeks 8-9)
-- Fee modeling engine
-- Gas optimization module
-- MEV protection system
+| Priority | Task                          | Code Reference              | Status  |
+|----------|-------------------------------|-----------------------------|---------|
+| P1       | Dynamic Fee Model             | FeeModel.ts                 | ⏳      |
+| P2       | MEV Protection Layer          | MEVShield.ts                | ❌      |
 
 ### Phase 4: Expansion (Weeks 10-12)
-- Cross-pool arbitrage
-- Insurance fund integration
-- Governance participation
+| Priority | Task                          | Code Reference              | Status  |
+|----------|-------------------------------|-----------------------------|---------|
+| P2       | Cross-Pool Arbitrage          | ArbitrageEngine.ts          | ❌      |
+| P3       | Insurance Fund Integration    | RiskPool.ts                 | ❌      |
+
+## Completed Features
+1. **Token Metrics Collection** (token_data.ts)
+   - Fetches from DexScreener API
+   - Calculates age, volume/MCap ratio
+   - Tracks data freshness
+   - ✅ Implemented basic version
+
+2. **Confidence Scoring** (confidence_score.ts)
+   - Implements weighting formula
+   - Applies time decay factors
+   - ✅ Core algorithm complete
+
+## Pending Requirements
+1. **Additional Data Sources**:
+   - On-chain holder analysis for `top10HolderPercentage`
+   - Historical price data for `volatilityScore`
+   - ❌ Needs Solscan/Birdeye API integration
+
+2. **Data Freshness Handling**:
+   - Cache layer for metric data
+   - Automatic refresh triggers
+   - ❌ Not implemented
+
+3. **Error Resilience**:
+   - Rate limiting for DexScreener API
+   - Fallback data sources
+   - ❌ Basic error handling only
+
+**Legend**:  
+✅ Implemented | ⏳ In Progress | ❌ Not Started | 🛠 Partial Implementation
+
+## Immediate Next Steps
+1. Create `blockchain_analyzer.ts` for holder distribution
+2. Implement Birdeye API client for volatility data
+3. Add caching to `token_data.ts`
+4. Connect confidence score to position sizing in DLMMClient.ts
 
 ---
 
