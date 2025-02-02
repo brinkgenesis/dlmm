@@ -1,5 +1,5 @@
 import { PublicKey, Connection, sendAndConfirmTransaction, Transaction, Signer, Keypair, TransactionSignature, ComputeBudgetProgram } from '@solana/web3.js';
-import DLMM, { StrategyType, PositionVersion, StrategyParameters, LbPosition, SwapQuote, computeBudgetIx } from '@meteora-ag/dlmm';
+import DLMM, { StrategyType, PositionVersion, StrategyParameters, LbPosition, SwapQuote, computeBudgetIx, PositionInfo } from '@meteora-ag/dlmm';
 import { Config } from '../models/Config';
 import '@coral-xyz/anchor';
 import BN from 'bn.js';
@@ -122,36 +122,23 @@ export class DLMMClient {
   /**
    * Retrieves user positions from the initialized DLMM pool.
    */
-  async getUserPositions(): Promise<UserPosition[]> {
-    try {
-      if (!this.dlmmPool) {
-        throw new Error('DLMM Pool is not initialized. Call initializeDLMMPool() first.');
-      }
+  public async getUserPositions(): Promise<PositionInfo[]> {
+    if (!this.dlmmPool) throw new Error('Pool not initialized');
+    
+    const { userPositions } = await this.dlmmPool.getPositionsByUserAndLbPair(
+      this.config.walletKeypair.publicKey
+    );
 
-      const userPublicKey = new PublicKey(this.config.publickey); //User Wallet Address
-      console.log(`Fetching positions for user: ${userPublicKey.toBase58()}`);
+    // Get the full LbPair object from the pool
+    const lbPair = this.dlmmPool.lbPair;
 
-      // Fetch user positions using the initialized dlmmPool
-      const { userPositions } = await this.dlmmPool.getPositionsByUserAndLbPair(userPublicKey);
-
-      if (!userPositions || userPositions.length === 0) {
-        console.log('No positions found for the user.');
-        return userPositions;
-      }
-
-      // Extract and log bin data from each position
-      userPositions.forEach((position: UserPosition, index: number) => {
-        const binData = position.positionData.positionBinData;
-        console.log(`Position ${index + 1}:`, position);
-        console.log(`Bin Data ${index + 1}:`, binData);
-        
-      });
-      return userPositions;
-
-    } catch (error: any) {
-      console.error('Error fetching user positions:', error.message || error);
-      throw error;
-    }
+    return userPositions.map(lbPos => ({
+      publicKey: lbPos.publicKey,
+      lbPair, // Full LbPair object required by SDK type
+      tokenX: this.dlmmPool!.tokenX,
+      tokenY: this.dlmmPool!.tokenY,
+      lbPairPositionsData: [lbPos]
+    }));
   }
 
   /**
@@ -640,47 +627,32 @@ export class DLMMClient {
    */
   public async closePosition(positionPubKey: PublicKey): Promise<void> {
     try {
-      console.log('--- Initiating closePosition ---');
-      console.log(`Position Public Key: ${positionPubKey.toBase58()}`);
+      if (!this.dlmmPool) throw new Error('DLMM Pool not initialized');
 
-      if (!this.dlmmPool) {
-        throw new Error('DLMM Pool is not initialized. Call initializeDLMMPool() first.');
-      }
-
-      // Retrieve all user positions using existing method
+      // Get positions using SDK-typed method
       const userPositions = await this.getUserPositions();
-
-      // Find the specific position matching positionPubKey
-      const userPosition = userPositions.find((position) =>
-        position.publicKey.equals(positionPubKey)
+      const positionInfo = userPositions.find(p => 
+        p.publicKey.equals(positionPubKey)
       );
 
-      if (!userPosition) {
-        console.error('No matching position found for the provided position public key.');
-        return; // Or throw an error if appropriate
+      if (!positionInfo) {
+        throw new Error('Position not found');
       }
 
-      console.log('Matched User Position:', userPosition);
+      // Use the first LbPosition from lbPairPositionsData
+      const lbPosition = positionInfo.lbPairPositionsData[0];
 
-      // **Construct LbPosition with version explicitly set to PositionVersion.V2**
-      const position: LbPosition = {
-        publicKey: userPosition.publicKey,
-        positionData: userPosition.positionData,
-        version: PositionVersion.V2, // Explicitly set to V2
-      };
-
-      // Generate transaction to close the position
-      const closePositionTx = await this.dlmmPool.closePosition({
+      const closeTx = await this.dlmmPool.closePosition({
         owner: this.config.walletKeypair.publicKey,
-        position: position, // Pass the LbPosition object
+        position: lbPosition // Pass the LbPosition directly
       });
 
       console.log('Initialized Close Position Transaction');
 
       // Assign the recent blockhash and fee payer
       const { blockhash } = await this.config.connection.getLatestBlockhash('finalized');
-      closePositionTx.recentBlockhash = blockhash;
-      closePositionTx.feePayer = this.config.walletKeypair.publicKey;
+      closeTx.recentBlockhash = blockhash;
+      closeTx.feePayer = this.config.walletKeypair.publicKey;
       console.log('Assigned Blockhash and Fee Payer to Transaction');
 
       // Signers for the transaction: the user
@@ -691,7 +663,7 @@ export class DLMMClient {
       console.log('Sending Transaction...');
       const signature: TransactionSignature = await sendAndConfirmTransaction(
         this.config.connection,
-        closePositionTx,
+        closeTx,
         signers,
         {
           skipPreflight: false,
@@ -889,8 +861,6 @@ export class DLMMClient {
       throw error;
     }
   }
-
-
 
 
 // Conditional IIFE

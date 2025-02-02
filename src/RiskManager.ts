@@ -2,38 +2,43 @@ import { DLMMClient } from './utils/DLMMClient';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { fetchTokenMetrics } from './utils/token_data';
 import { PositionSnapshotService } from './utils/positionSnapshot';
-import DLMM from '@meteora-ag/dlmm';
+import DLMM, { PositionInfo, BinLiquidity, StrategyType, PositionVersion, StrategyParameters, LbPosition, SwapQuote, computeBudgetIx } from '@meteora-ag/dlmm';
 import { FetchPrice } from './utils/fetch_price';
 
+
 export class RiskManager {
-  private snapshotService = new PositionSnapshotService();
+  private snapshotService  = new PositionSnapshotService();
 
   constructor(private dlmmClient: DLMMClient) {}
 
-  public async checkDrawdown(thresholdPercent: number): Promise<boolean> {
+  public async checkDrawdown(
+    poolAddress: PublicKey, 
+    thresholdPercent: number
+  ): Promise<boolean> {
     const positions = await this.dlmmClient.getUserPositions();
-    if (positions.length === 0) return false;
+    if (!positions.length) return false;
 
-    // Calculate current USD value using the first user position
-    const currentValue = await this.calculatePositionValue(userPositions[0]);
-
-    // Use the pool's key (lbPair) for snapshot storage
-    const poolKeyStr = lbPair.toBase58();
+    const position = positions[0];
+    const currentValue = await this.calculatePositionValue(position);
+    const poolKeyStr = poolAddress.toBase58();
 
     await this.snapshotService.recordSnapshot(poolKeyStr, currentValue);
     const peakValue = await this.snapshotService.getPeakValue(poolKeyStr);
-    if (peakValue === 0) return false;
-
-    const drawdown = ((peakValue - currentValue) / peakValue) * 100;
-    return drawdown >= thresholdPercent;
+    
+    return peakValue > 0 && 
+      ((peakValue - currentValue) / peakValue) * 100 >= thresholdPercent;
   }
 
   public async adjustPositionSize(bpsToRemove: number): Promise<void> {
     const positions = await this.dlmmClient.getUserPositions();
-    if (!positions || positions.length === 0) return;
+    if (!positions.length) return;
+    
     const position = positions[0];
-    const bins = position.positionData.positionBinData.map(bin => bin.binId);
+    const bins = position.lbPairPositionsData[0].positionData.positionBinData.map(b => 
+      Number(b.binId)
+    );
     const binIdsToRemove = this.getFullBinRange(bins);
+    
     await this.dlmmClient.removeLiquidity(
       position.publicKey,
       bpsToRemove,
@@ -45,7 +50,7 @@ export class RiskManager {
   public async checkVolumeDrop(threshold: number): Promise<boolean> {
     const positions = await this.dlmmClient.getUserPositions();
     if (!positions || positions.length === 0) return false;
-    const tokenMint = positions[0].tokenX.mint || this.dlmmClient.poolAddress.toBase58();
+    const tokenMint = positions[0].tokenX.publicKey.toBase58();
     const metrics = await fetchTokenMetrics('solana', tokenMint);
     const volumeMA = await this.calculateVolumeMA();
     return metrics.volumeMcapRatio < volumeMA * threshold;
@@ -55,7 +60,9 @@ export class RiskManager {
     const positions = await this.dlmmClient.getUserPositions();
     if (!positions || positions.length === 0) return;
     for (const position of positions) {
-      const bins = position.positionData.positionBinData.map(bin => bin.binId);
+      const bins = position.lbPairPositionsData[0].positionData.positionBinData.map(b => 
+        Number(b.binId)
+      );
       const binIdsToRemove = this.getFullBinRange(bins);
       await this.dlmmClient.removeLiquidity(
         position.publicKey,
@@ -71,20 +78,24 @@ export class RiskManager {
     return 0;
   }
 
-  private async calculatePositionValue(positionInfo: any): Promise<number> {
-    const solPrice = await this.getSOLPrice();
-    const activeBin = await this.dlmmClient.getActiveBin();
-    // Assume token decimals are available on properties tokenX and tokenY; adjust as needed.
-    const xDecimals = positionInfo.tokenX ? positionInfo.tokenX.decimals : 9;
-    const yDecimals = positionInfo.tokenY ? positionInfo.tokenY.decimals : 9;
-    const pricePerToken = Number(activeBin.price) / Math.pow(10, xDecimals + yDecimals);
+  private async calculatePositionValue(position: PositionInfo): Promise<number> {
+    const [solPrice, activeBin] = await Promise.all([
+      this.getSOLPrice(),
+      this.dlmmClient.getActiveBin()
+    ]);
 
-    // Using total amounts from positionData; adapt if your structure differs.
-    const xAmount = Number(positionInfo.positionData.totalXAmount) / Math.pow(10, xDecimals);
-    const yAmount = Number(positionInfo.positionData.totalYAmount) / Math.pow(10, yDecimals);
-    const xValue = xAmount * pricePerToken;
-    const yValue = yAmount * solPrice;
-    return xValue + yValue;
+    const lbPosition = position.lbPairPositionsData[0];
+    const { tokenX, tokenY } = position;
+
+    // Convert amounts using token decimals
+    const xAmount = Number(lbPosition.positionData.totalXAmount) / 10 ** tokenX.decimal;
+    const yAmount = Number(lbPosition.positionData.totalYAmount) / 10 ** tokenY.decimal;
+     
+    // Convert price from BN to number
+    const pricePerToken = Number(activeBin.price) / 
+      (10 ** (tokenX.decimal + tokenY.decimal));
+
+    return (xAmount * pricePerToken) + (yAmount * solPrice);
   }
 
   private async getSOLPrice(): Promise<number> {

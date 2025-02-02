@@ -7,7 +7,7 @@ export class PositionManager {
   
   constructor(
     private dlmmClient: DLMMClient,
-    private poolAddress: PublicKey
+    public poolAddress: PublicKey
   ) {
     this.riskManager = new RiskManager(dlmmClient);
   }
@@ -16,7 +16,10 @@ export class PositionManager {
     // Check risk parameters every 5 minutes
     setInterval(async () => {
       try {
-        const drawdownTriggered = await this.riskManager.checkDrawdown(15);
+        const drawdownTriggered = await this.riskManager.checkDrawdown(
+          this.poolAddress,
+          15
+        );
         
         if (drawdownTriggered) {
           await this.riskManager.adjustPositionSize(0.5);
