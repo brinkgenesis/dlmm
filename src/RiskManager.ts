@@ -25,31 +25,52 @@ export class RiskManager {
 
   constructor(private dlmmClient: DLMMClient) {}
 
-  public async checkDrawdown(
-    poolAddress: PublicKey,
-    thresholdPercent: number
-  ): Promise<boolean> {
+  public async checkDrawdown(poolAddress: PublicKey, thresholdPercent: number): Promise<boolean> {
     const positions = await this.dlmmClient.getUserPositions();
-    if (!positions.length) return false;
-
-    const position = positions[0];
-    const currentValue = await this.calculatePositionValue(position);
     const poolKeyStr = poolAddress.toBase58();
+    
+    let anyTriggered = false;
+    
+    for (const position of positions) {
+      // Verify position belongs to target pool
+      
+      const currentValue = await this.calculatePositionValue(position);
+      const positionKey = position.publicKey.toBase58();
 
-    // Record snapshot with timestamp
-    await this.snapshotService.recordSnapshot(poolKeyStr, {
-      value: currentValue,
-      timestamp: Date.now()
-    });
+      // Record per-position snapshot
+      await this.snapshotService.recordSnapshot(positionKey, {
+        value: currentValue,
+        timestamp: Date.now()
+      });
 
-    // Get peak from last 30 minutes
-    const peakValue = await this.snapshotService.getPeakValue(
-      poolKeyStr,
-      Date.now() - 30 * 60 * 1000
+      // Check individual position drawdown
+      const peakValue = await this.snapshotService.getPeakValue(
+        positionKey,
+        Date.now() - 30 * 60 * 1000
+      );
+
+      if (peakValue > 0 && 
+        ((peakValue - currentValue) / peakValue) * 100 >= thresholdPercent) {
+        anyTriggered = true;
+        await this.adjustSinglePosition(position, 5000); // 50% reduction
+      }
+    }
+
+    return anyTriggered;
+  }
+
+  private async adjustSinglePosition(position: PositionInfo, bpsToRemove: number): Promise<void> {
+    const bins = position.lbPairPositionsData[0].positionData.positionBinData.map(b => 
+      Number(b.binId)
     );
-
-    return peakValue > 0 && 
-      ((peakValue - currentValue) / peakValue) * 100 >= thresholdPercent;
+    const binIdsToRemove = this.getFullBinRange(bins);
+    
+    await this.dlmmClient.removeLiquidity(
+      position.publicKey,
+      bpsToRemove,
+      binIdsToRemove,
+      false
+    );
   }
 
   public async enforceCircuitBreaker(poolAddress: PublicKey): Promise<void> {
@@ -62,7 +83,6 @@ export class RiskManager {
     );
 
     if (triggered) {
-      await this.adjustPositionSize(5000);
       this.lastAdjustmentTime = Date.now();
     }
   }
