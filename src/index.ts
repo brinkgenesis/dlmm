@@ -9,7 +9,7 @@ import inquirer from 'inquirer';
 import * as fs from 'fs';
 import * as path from 'path';
 import { calculateTokenAmounts } from './utils/calculateAmounts';
-
+import { PositionManager } from './managePosition';
 /**
  * Main execution block
  */
@@ -131,24 +131,11 @@ import { calculateTokenAmounts } from './utils/calculateAmounts';
       });
     }
   
-
-    // **Create PositionManager Instance with totalRangeInterval**
-   // const positionManager = new PositionManager(
-    //  client,
-     //config,
-     // positionStorage,
-     // totalRangeInterval
-   // );
-   // console.log('PositionManager instance created.');
-
-    // Ensure Associated Token Accounts exist
-   // await client.ensureATAs();
-  //  console.log('ATA (Associated Token Accounts) ensured.');
-
-    // Manage Positions Based on Market Conditions
-  //  await positionManager.managePositions();
-   // console.log('Position management executed.');
-
+      //start Position Manager
+      console.log(`Starting Position Manager`);
+      const positionManager = new PositionManager(client, poolPublicKey);
+      positionManager.monitorAndAdjust(); // Starts 30m interval
+   
   } catch (error: any) {
     if (error instanceof SendTransactionError) {
       console.error('Error creating position: Simulation failed.');

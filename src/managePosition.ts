@@ -13,26 +13,12 @@ export class PositionManager {
   }
 
   public async monitorAndAdjust() {
-    // Check risk parameters every 5 minutes
     setInterval(async () => {
       try {
-        const drawdownTriggered = await this.riskManager.checkDrawdown(
-          this.poolAddress,
-          15
-        );
-        
-        if (drawdownTriggered) {
-          await this.riskManager.adjustPositionSize(0.5);
-        }
-
-        const volumeDrop = await this.riskManager.checkVolumeDrop(0.5);
-        
-        if (volumeDrop) {
-          await this.riskManager.closeAllPositions();
-        }
+        await this.riskManager.enforceCircuitBreaker(this.poolAddress);
       } catch (error) {
-        console.error('Risk monitoring error:', error);
+        console.error('Circuit breaker error:', error);
       }
-    }, 300_000); // 5 minute intervals
+    }, 30 * 60 * 1000); // 30 minute interval
   }
 }

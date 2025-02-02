@@ -377,4 +377,43 @@ export class MarketPhaseDetector {
 
 This plan directly connects strategic requirements with concrete implementation patterns from your codebase while maintaining alignment with the PRD objectives. Each component can be developed incrementally while maintaining system stability.
 
+02/03/2025
+## Updated Implementation Notes (v1.3)
+
+### Critical Architecture Improvements
+- **SDK Type Alignment**:
+  - Full integration with Meteora DLMM SDK types:
+    - `PositionInfo` → `LbPosition` mapping
+    - `positionData.totalXAmount/YAmount` access
+    - Bin ID number conversions
+  - Removed all custom type definitions
+  - Strict interface validation for pool parameters
+
+- **Risk Management Enhancements**:
+  - Drawdown detection using native SDK PositionData
+  - Volume collapse triggers via tokenX.mint tracking
+  - Bin range calculations from positionBinData
+  - Pool address injection pattern for position tracking
+
+- **Data Accuracy Upgrades**:
+  - Decimal normalization using token reserves
+  - BN to number conversions for financial calculations
+  - Position value derivation from active bin price
+  - SOL price oracle integration for USD conversions
+
+### Performance Optimizations
+- **Liquidity Operations**:
+  - Batch position updates via lbPairPositionsData
+  - Bin range compression for partial withdrawals
+  - Transaction batching for MEV protection
+  - Fee-aware position sizing
+
+**Implementation Checklist Update**:
+
+| Component              | Status | Details |
+|------------------------|--------|---------|
+| SDK Type Integration   | ✅      | Full PositionInfo/LbPosition alignment |
+| Risk Detection         | ✅      | Drawdown/volume triggers operational |
+| Decimal Handling       | ✅      | Token decimal normalization complete |
+| Pool Address Injection | ✅      | Position tracking via known pool key |
 

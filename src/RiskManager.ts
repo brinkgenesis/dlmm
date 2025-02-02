@@ -8,11 +8,13 @@ import { FetchPrice } from './utils/fetch_price';
 
 export class RiskManager {
   private snapshotService  = new PositionSnapshotService();
+  private lastAdjustmentTime: number = 0;
+  private readonly COOLDOWN_PERIOD = 30 * 60 * 1000; // 30 minutes in ms
 
   constructor(private dlmmClient: DLMMClient) {}
 
   public async checkDrawdown(
-    poolAddress: PublicKey, 
+    poolAddress: PublicKey,
     thresholdPercent: number
   ): Promise<boolean> {
     const positions = await this.dlmmClient.getUserPositions();
@@ -22,11 +24,35 @@ export class RiskManager {
     const currentValue = await this.calculatePositionValue(position);
     const poolKeyStr = poolAddress.toBase58();
 
-    await this.snapshotService.recordSnapshot(poolKeyStr, currentValue);
-    const peakValue = await this.snapshotService.getPeakValue(poolKeyStr);
-    
+    // Record snapshot with timestamp
+    await this.snapshotService.recordSnapshot(poolKeyStr, {
+      value: currentValue,
+      timestamp: Date.now()
+    });
+
+    // Get peak from last 30 minutes
+    const peakValue = await this.snapshotService.getPeakValue(
+      poolKeyStr,
+      Date.now() - 30 * 60 * 1000
+    );
+
     return peakValue > 0 && 
       ((peakValue - currentValue) / peakValue) * 100 >= thresholdPercent;
+  }
+
+  public async enforceCircuitBreaker(poolAddress: PublicKey): Promise<void> {
+    const now = Date.now();
+    if (now - this.lastAdjustmentTime < this.COOLDOWN_PERIOD) return;
+
+    const triggered = await this.checkDrawdown(
+      poolAddress,
+      15
+    );
+
+    if (triggered) {
+      await this.adjustPositionSize(5000);
+      this.lastAdjustmentTime = Date.now();
+    }
   }
 
   public async adjustPositionSize(bpsToRemove: number): Promise<void> {
