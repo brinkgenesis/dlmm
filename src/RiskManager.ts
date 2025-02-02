@@ -4,7 +4,19 @@ import { fetchTokenMetrics } from './utils/token_data';
 import { PositionSnapshotService } from './utils/positionSnapshot';
 import DLMM, { PositionInfo, BinLiquidity, StrategyType, PositionVersion, StrategyParameters, LbPosition, SwapQuote, computeBudgetIx } from '@meteora-ag/dlmm';
 import { FetchPrice } from './utils/fetch_price';
+import { VolumeData } from './utils/data/marketData';
 
+
+
+// Mock data generator for testing
+const MOCK_VOLUME_DATA: VolumeData[] = [
+  { timestamp: Date.now() - 5*3600*1000, volume: 150000 },
+  { timestamp: Date.now() - 4*3600*1000, volume: 175000 },
+  { timestamp: Date.now() - 3*3600*1000, volume: 130000 },
+  { timestamp: Date.now() - 2*3600*1000, volume: 190000 },
+  { timestamp: Date.now() - 1*3600*1000, volume: 165000 },
+  { timestamp: Date.now(), volume: 140000 }
+];
 
 export class RiskManager {
   private snapshotService  = new PositionSnapshotService();
@@ -78,7 +90,7 @@ export class RiskManager {
     if (!positions || positions.length === 0) return false;
     const tokenMint = positions[0].tokenX.publicKey.toBase58();
     const metrics = await fetchTokenMetrics('solana', tokenMint);
-    const volumeMA = await this.calculateVolumeMA();
+    const volumeMA = await this.calculateVolumeMA(tokenMint);
     return metrics.volumeMcapRatio < volumeMA * threshold;
   }
 
@@ -99,9 +111,29 @@ export class RiskManager {
     }
   }
 
-  private async calculateVolumeMA(): Promise<number> {
-    // Placeholder implementation for the 6-hour moving average.
-    return 0;
+  private async calculateVolumeMA(tokenMint: string): Promise<number> {
+    try {
+      // Get last 6 hours of data
+      const endTime = Date.now();
+      const startTime = endTime - 6 * 3600 * 1000;
+      
+      // Real implementation would call:
+      // const history = await fetchVolumeHistory(tokenMint, startTime, endTime);
+      const history = MOCK_VOLUME_DATA; // Remove for production
+      
+      if (history.length === 0) {
+        console.warn('No volume data available');
+        return 0;
+      }
+
+      // Calculate simple moving average
+      const sum = history.reduce((acc, entry) => acc + entry.volume, 0);
+      return sum / history.length;
+      
+    } catch (error) {
+      console.error('Volume MA calculation failed:', error);
+      return 0; // Fail-safe return
+    }
   }
 
   private async calculatePositionValue(position: PositionInfo): Promise<number> {
