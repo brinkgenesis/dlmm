@@ -1,5 +1,5 @@
 import { PublicKey, Connection, sendAndConfirmTransaction, Transaction, Signer, Keypair, TransactionSignature, ComputeBudgetProgram } from '@solana/web3.js';
-import DLMM, { StrategyType, PositionVersion, StrategyParameters, LbPosition, SwapQuote, computeBudgetIx, PositionInfo } from '@meteora-ag/dlmm';
+import DLMM, { MAX_CLAIM_ALL_ALLOWED, StrategyType, PositionVersion, StrategyParameters, LbPosition, SwapQuote, computeBudgetIx, PositionInfo } from '@meteora-ag/dlmm';
 import { Config } from '../models/Config';
 import '@coral-xyz/anchor';
 import BN from 'bn.js';
@@ -61,8 +61,8 @@ interface PositionBinData {
  * DLMMClient is responsible for initializing the Meteora DLMM SDK and managing operations.
  */
 export class DLMMClient {
-  private dlmmPool?: DLMM;
-  private config: Config;
+  public dlmmPool?: DLMM;
+  public config: Config;
   private connection: Connection;
 
   /**
@@ -300,7 +300,7 @@ export class DLMMClient {
     }
   }
 
-  private async sendTransactionWithBackoff(
+  public async sendTransactionWithBackoff(
     transaction: Transaction,
     signers: Signer[],
     maxRetries = 3
@@ -861,6 +861,7 @@ export class DLMMClient {
       throw error;
     }
   }
+
 
 
 // Conditional IIFE

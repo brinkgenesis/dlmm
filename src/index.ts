@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { calculateTokenAmounts } from './utils/calculateAmounts';
 import { PositionManager } from './managePosition';
+import { PassiveProcessManager } from './passiveProcess';
 /**
  * Main execution block
  */
@@ -131,11 +132,13 @@ import { PositionManager } from './managePosition';
       });
     }
   
-      //start Position Manager
-      console.log(`Starting Position Manager`);
-      const positionManager = new PositionManager(client, poolPublicKey);
-      positionManager.monitorAndAdjust(); // Starts 30m interval
+    //start Position Manager
+    console.log(`Starting Position Manager`);
+    const positionManager = new PositionManager(client, poolPublicKey);
+    positionManager.monitorAndAdjust(); // Starts 30m interval
    
+    const passiveManager = new PassiveProcessManager(client, client.config.walletKeypair, poolPublicKey);
+    passiveManager.startAll();
   } catch (error: any) {
     if (error instanceof SendTransactionError) {
       console.error('Error creating position: Simulation failed.');
