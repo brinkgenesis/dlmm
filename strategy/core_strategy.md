@@ -417,3 +417,119 @@ This plan directly connects strategic requirements with concrete implementation 
 | Decimal Handling       | ✅      | Token decimal normalization complete |
 | Pool Address Injection | ✅      | Position tracking via known pool key |
 
+## 3. Order Management System
+
+### 3.1 OrderManager Implementation
+
+**Purpose**: Centralized order execution for limit orders, take profits, and stop losses with price monitoring.
+
+**Key Features**:
+- Single monitoring interval for all order types
+- Supports partial/full position closures
+- Reuses existing DLMMClient operations
+- Matches codebase architecture patterns
+
+```typescript
+// orderManager.ts
+type OrderType = 'LIMIT'|'TAKE_PROFIT'|'STOP_LOSS';
+
+interface OrderConfig {
+  orderType: OrderType;
+  triggerPrice: number;
+  positionSize?: number; 
+  closeBps?: number; // 1-10000 (100% = 10000)
+}
+
+export class OrderManager {
+  private activeOrders = new Map<string, OrderConfig>();
+  
+  constructor(
+    private dlmmClient: DLMMClient,
+    private poolAddress: PublicKey
+  ) {}
+
+  public addOrder(orderId: string, config: OrderConfig) {
+    this.activeOrders.set(orderId, config);
+    this.startMonitoring();
+  }
+}
+```
+
+### 3.2 Implementation Guide
+
+**1. Initialization**  
+Add to existing manager initialization sequence:
+```typescript
+// index.ts
+const orderManager = new OrderManager(client, poolPublicKey);
+orderManager.addOrder('sol-2.5-limit', {
+  orderType: 'LIMIT',
+  triggerPrice: 2.5, 
+  positionSize: 1000 // $1000
+});
+```
+
+**2. Execution Flow**  
+```mermaid
+graph TD
+  A[60s Interval] --> B[Get Current Price]
+  B --> C{Check Order Triggers}
+  C -->|Limit Order| D[Create Position]
+  C -->|Take Profit/Stop Loss| E[Close Position]
+```
+
+**3. Key Integration Points**
+```typescript
+// Reuses existing DLMMClient methods
+dlmmClient.createPosition()    // Line 350-477
+dlmmClient.closePosition()     // Line 628-679  
+dlmmClient.removeLiquidity()   // Line 560-623
+dlmmClient.getUserPositions()  // Line 200-230
+```
+
+### 3.3 Best Practices
+
+1. **Order Identification**  
+   Use unique order IDs for tracking:
+   ```typescript
+   orderManager.addOrder('eth-1800-tp', {
+     orderType: 'TAKE_PROFIT',
+     triggerPrice: 1800,
+     closeBps: 5000 // Close 50%
+   });
+   ```
+
+2. **Partial Closures**  
+   Gradual position unwinding:
+   ```typescript
+   // 25% increments until full closure
+   const partialCloseOrder = {
+     orderType: 'STOP_LOSS',
+     triggerPrice: 1.8,
+     closeBps: 2500 
+   };
+   ```
+
+3. **Price Monitoring**  
+   Uses existing price feed:
+   ```typescript
+   // orderManager.ts
+   private async getCurrentPrice(): Promise<number> {
+     const activeBin = await this.dlmmClient.getActiveBin();
+     return activeBin.price; // From DLMMClient.ts:100-130
+   }
+   ```
+
+### 3.4 Validation Checklist
+
+✅ Test with 100% closure (closeBps: 10000)  
+✅ Verify price comparison logic (>, < operators)  
+✅ Confirm order removal after execution  
+✅ Monitor transaction fee costs
+
+### 3.5 Future Considerations
+
+- Dynamic order parameters based on volatility
+- Order expiration timestamps
+- Multi-pool order support
+
