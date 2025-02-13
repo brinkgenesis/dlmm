@@ -63,7 +63,7 @@ interface PositionBinData {
 export class DLMMClient {
   public dlmmPool?: DLMM;
   public config: Config;
-  private connection: Connection;
+  public connection: Connection;
 
   /**
    * Constructs a new DLMMClient instance.

@@ -1,7 +1,7 @@
-
-   %% Mermaid diagram for index.ts application flow
+%% Mermaid diagram for index.ts application flow
 flowchart TD
-
+```mermaid
+graph TD;
     A[Start] --> B[Load Config]
     B --> C[Read Markets.json]
     C --> D[Prompt User]
@@ -21,7 +21,7 @@ flowchart TD
     M --> N[Position Manager\n30m Risk Checks]
     M --> O[Passive Process Manager\n3h Reward Claims]
     
-    E -.->|Line 24- D
+    E -.->|Line 24| D
     F -.->|Line 44-56| D
     G -.->|Line 59-69| D
     I -.->|Line 103-110| L
@@ -43,3 +43,4 @@ flowchart TD
     click K "src/utils/DLMMClient.ts#L466-477" "Single Side Logic"
     click N "src/managePosition.ts#L15-23" "Risk Management"
     click O "src/passiveProcess.ts#L25-50" "Reward System"
+```

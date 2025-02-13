@@ -170,6 +170,43 @@
    - Applies time decay factors
    - ✅ Core algorithm complete
 
+3. **Auto-Compounding Engine** (autoCompounder.ts)
+   - **Key Functionality**:
+     - Hourly reward claiming from all active positions
+     - Token X balance verification using SPL Token Program
+     - Automatic single-sided position creation with claimed rewards
+   - **Integration Points**:
+     - Reuses `createSingleSidePosition` from DLMMClient.ts (lines 744-834)
+     - Leverages existing transaction system (sendTransactionWithBackoff)
+     - Inherits pool context from PositionManager
+   - **Multi-Pool Support**:
+     - Cross-pool position scanning via `getAllUserPositions()`
+     - Independent compounding per pool
+     - Error isolation between pools
+   - **Status**: ✅ Implemented (v1.2)
+
+**Implementation Snippet**:
+```typescript:src/autoCompounder.ts
+public async autoCompound() {
+  // Claims rewards for all positions
+  const claimTxs = await this.dlmmClient.dlmmPool!.claimAllRewards({
+    owner: this.wallet.publicKey,
+    positions: await this.getUserPositions()
+  });
+  
+  // Executes claim transactions
+  for (const tx of claimTxs) {
+    await this.dlmmClient.sendTransactionWithBackoff(tx, [this.wallet]);
+  }
+
+  // Compounds Token X balance
+  const tokenXBalance = await this.getTokenXBalance();
+  if (tokenXBalance > 0) {
+    await this.dlmmClient.createSingleSidePosition(tokenXBalance, true);
+  }
+}
+```
+
 ## Pending Requirements
 1. **Additional Data Sources**:
    - On-chain holder analysis for `top10HolderPercentage`
@@ -532,4 +569,149 @@ dlmmClient.getUserPositions()  // Line 200-230
 - Dynamic order parameters based on volatility
 - Order expiration timestamps
 - Multi-pool order support
+
+## 7. Multi-Pool Management Architecture
+
+### 7.1 Core Implementation Changes
+
+**File Structure**:
+```tree
+src/
+├── utils/
+│   ├── DLMMClient.ts          # Modified
+├── managePosition.ts          # Modified  
+├── passiveProcess.ts          # Modified
+├── autoCompounder.ts          # Maintained
+└── models/
+    └── Config.ts              # Modified
+```
+
+**1. DLMMClient.ts Modifications**:
+```typescript:src/utils/DLMMClient.ts
+// Add program ID handling and cross-pool position scanning
+export class DLMMClient {
+  private programId: PublicKey;
+
+  constructor(config: Config) {
+    this.programId = new PublicKey(config.dlmmProgramId);
+    // ... existing constructor code ...
+  }
+
+  public async getAllUserPositions(): Promise<PositionInfo[]> {
+    const programAccounts = await this.connection.getProgramAccounts(
+      this.programId,
+      {filters: [{
+        memcmp: {
+          offset: 40, // Position account owner offset
+          bytes: this.config.walletKeypair.publicKey.toBase58()
+        }
+      }]}
+    );
+    
+    return Promise.all(programAccounts.map(async account => 
+      this.dlmmPool!.decodePosition(account.pubkey, account.account.data)
+    ));
+  }
+}
+```
+
+**2. managePosition.ts Changes**:
+```typescript:src/managePosition.ts
+export class PositionManager {
+  constructor(private dlmmClient: DLMMClient) {
+    this.riskManager = new RiskManager(dlmmClient);
+  }
+
+  public async monitorAndAdjust() {
+    setInterval(async () => {
+      const positions = await this.dlmmClient.getAllUserPositions();
+      positions.forEach(pos => {
+        this.riskManager.enforceCircuitBreaker(pos.poolAddress);
+      });
+    }, 30 * 60 * 1000);
+  }
+}
+```
+
+**3. passiveProcess.ts Updates**:
+```typescript:src/passiveProcess.ts
+export class PassiveProcessManager {
+  constructor(
+    private dlmmClient: DLMMClient,
+    private wallet: Keypair
+  ) {}
+
+  private scheduleAutoCompound() {
+    const interval = setInterval(async () => {
+      const positions = await this.dlmmClient.getAllUserPositions();
+      const uniquePools = [...new Set(positions.map(p => p.poolAddress))];
+      
+      uniquePools.forEach(poolAddress => {
+        const compounder = new AutoCompounder(
+          this.dlmmClient,
+          poolAddress,
+          this.wallet
+        );
+        compounder.autoCompound();
+      });
+    }, 60 * 60 * 1000);
+    this.intervalIds.push(interval);
+  }
+}
+```
+
+**4. Config.ts Addition**:
+```typescript:src/models/Config.ts
+export class Config {
+  // ... existing config properties ...
+  
+  public get dlmmProgramId(): string {
+    return process.env.DLMM_PROGRAM_ID!;
+  }
+}
+```
+
+### 7.2 Architectural Flow
+
+```mermaid
+graph TD
+  A[PassiveProcessManager] --> B[getAllUserPositions]
+  B --> C[Extract Unique Pools]
+  C --> D[Create AutoCompounder per Pool]
+  D --> E[Pool 1 Claims+Compound]
+  D --> F[Pool 2 Claims+Compound]
+  D --> G[Pool N...]
+```
+
+### 7.3 Implementation Notes
+
+1. **Initialization Pattern**:
+```typescript:src/index.ts
+// Single manager instance handles all pools
+const positionManager = new PositionManager(client);
+const passiveManager = new PassiveProcessManager(client, walletKeypair);
+```
+
+2. **Error Isolation**:
+- Each pool's operations run in separate try/catch blocks
+- Pool failures don't impact other pools
+- Independent retry logic per pool
+
+3. **Performance Considerations**:
+- Cached pool instances for reused pools
+- Parallel processing of non-conflicting pools
+- Shared connection for batch requests
+
+### 7.4 Benefits
+- Automatic discovery of new positions
+- Consistent risk management across pools
+- Shared resource utilization
+- Simplified monitoring interface
+
+### 7.5 Monitoring Metrics
+| Metric                  | Calculation               | Alert Threshold |
+|-------------------------|---------------------------|-----------------|
+| Active Pools            | Unique poolAddress count  | >50             |
+| Cross-Pool Exposure     | ∑(PositionValue) / Total  | >30% single pool|
+| Compound Efficiency     | (CompoundedAmount / Fees) | <0.85           |
 

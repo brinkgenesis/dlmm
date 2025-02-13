@@ -1,5 +1,6 @@
 import { ComputeBudgetProgram, Keypair, PublicKey, Transaction } from "@solana/web3.js";
 import { DLMMClient } from "./utils/DLMMClient";
+import { AutoCompounder } from './autoCompounder';
 
 export class PassiveProcessManager {
   private intervalIds: NodeJS.Timeout[] = [];
@@ -12,6 +13,7 @@ export class PassiveProcessManager {
 
   public startAll() {
     this.scheduleRewardClaims();
+    this.scheduleAutoCompound();
   }
 
   private scheduleRewardClaims() {
@@ -49,6 +51,19 @@ export class PassiveProcessManager {
         console.error('Reward claim cycle failed:', error);
       }
     }, 3 * 3600 * 1000);
+    
+    this.intervalIds.push(interval);
+  }
+
+  private scheduleAutoCompound() {
+    const interval = setInterval(async () => {
+      const compounder = new AutoCompounder(
+        this.dlmmClient,
+        this.poolAddress,
+        this.wallet
+      );
+      await compounder.autoCompound();
+    }, 60 * 60 * 1000); // 1 hour
     
     this.intervalIds.push(interval);
   }
