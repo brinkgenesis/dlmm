@@ -26,6 +26,10 @@ export class Config {
   public liquidityRemovalUpperPercent: number;
   public liquidityRemovalLowerPercent: number;
 
+  // New configuration flags
+  public autoClaimEnabled: boolean;
+  public autoCompoundEnabled: boolean;
+
   private _poolPublicKey?: string;
 
   private static instance: Config | null = null;
@@ -53,6 +57,10 @@ export class Config {
     // Load percentage-based thresholds
     this.liquidityRemovalUpperPercent = parseFloat(process.env.LIQUIDITY_REMOVAL_UPPER_PERCENT!);
     this.liquidityRemovalLowerPercent = parseFloat(process.env.LIQUIDITY_REMOVAL_LOWER_PERCENT!);
+
+    // Load configuration flags
+    this.autoClaimEnabled = process.env.AUTO_CLAIM_ENABLED === 'true';
+    this.autoCompoundEnabled = process.env.AUTO_COMPOUND_ENABLED === 'true';
   }
 
   /**

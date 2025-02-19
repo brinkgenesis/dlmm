@@ -3,6 +3,7 @@ import DLMM, { LbPosition } from '@meteora-ag/dlmm';
 import { initializeUserPools } from './utils/createMultiplePools';
 import { AutoCompounder } from './autoCompounder';
 import { Config } from './models/Config';
+import { sendAndConfirmTransaction } from '@solana/web3.js';
 
 export class PassiveProcessManager {
   private intervalIds: NodeJS.Timeout[] = [];
@@ -14,16 +15,19 @@ export class PassiveProcessManager {
   ) {}
 
   public async startAll() {
-    // Initialize pools using the dedicated utility function with required parameters
+    const config = Config.load();
     const { initializedPools, positionMap } = await initializeUserPools(
         this.connection,
         this.wallet.publicKey
     );
     this.initializedPools = initializedPools;
     
-    // Start scheduled tasks
-    this.scheduleRewardClaims(positionMap);
-    this.scheduleAutoCompound();
+    if (config.autoClaimEnabled) {
+        this.scheduleRewardClaims(positionMap);
+    }
+    if (config.autoCompoundEnabled) {
+        this.scheduleAutoCompound();
+    }
   }
 
   private scheduleRewardClaims(positionMap: Map<string, { lbPairPositionsData: LbPosition[] }>) {
@@ -78,9 +82,12 @@ export class PassiveProcessManager {
   }
 
   private async sendTransactionWithBackoff(tx: Transaction) {
-    const signature = await this.connection.sendTransaction(tx, [this.wallet]);
-    await this.connection.confirmTransaction(signature);
-    return signature;
+    return sendAndConfirmTransaction(
+      this.connection,
+      tx,
+      [this.wallet],
+      { commitment: 'confirmed' }
+    );
   }
 
   public stopAll() {
