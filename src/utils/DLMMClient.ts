@@ -862,8 +862,6 @@ export class DLMMClient {
     }
   }
 
-
-
 // Conditional IIFE
 if (require.main === module) {
   (async () => {
