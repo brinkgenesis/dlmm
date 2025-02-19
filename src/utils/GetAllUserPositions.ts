@@ -1,10 +1,10 @@
-import { Config } from '../src/models/Config';
+import { Config } from '../models/Config';
 import DLMM, { MAX_CLAIM_ALL_ALLOWED, StrategyType, PositionVersion, StrategyParameters, LbPosition, SwapQuote, computeBudgetIx, PositionInfo } from '@meteora-ag/dlmm';
 import { PublicKey } from '@solana/web3.js';
 import * as fs from 'fs';
 import BN from 'bn.js';
 
-async function testUserPositions() {
+async function GetAllUserPositions() {
   const config = Config.load();
   const userPubKey = config.walletKeypair.publicKey;
 
@@ -122,7 +122,7 @@ async function testUserPositions() {
 
 // Run test if executed directly
 if (require.main === module) {
-  testUserPositions().then(() => {
+  GetAllUserPositions().then(() => {
     console.log('User positions test completed');
     process.exit(0);
   });

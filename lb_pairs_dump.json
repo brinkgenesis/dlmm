@@ -1,0 +1,1952 @@
+[
+  {
+    "publicKey": "GBPr7kgMP8YGmETU5aaBU9SJ8jjUhFAWu4SWUjpWAMCC",
+    "lbPair": {
+      "tokenXMint": "3VXLFTYECBfurFnhP4uKHv6NWasUuNz3rsfoBMoRXD6H",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "FMC3AV8KVrt8ggeqn79gcGdmMa9Ryk9uVGtuPASmnYjC",
+      "reserveY": "HyFf2Rk42e8VzofvAyMjrACMrUrfxQcPL3f8GHh1pn4m",
+      "protocolFee": {
+        "amountX": "0",
+        "amountY": "0"
+      },
+      "binStep": 100,
+      "activeId": -978,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "FffxDVogcSm5aBaHMgB5UytReMtuFf7rC51Ljv4YWeTF",
+      "parameters": {
+        "baseFactor": 10000,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 0,
+        "volatilityReference": 0,
+        "indexReference": -978,
+        "lastUpdateTimestamp": "1716237550"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "32KziHKuiqdrLFMbXReMkm9KQitMqgYou52nMWtFKKLL",
+    "lbPair": {
+      "tokenXMint": "4Hq1qGjnMXAHVwfBS5dZPAh8MJoRKV2XhRpj2v9Fpump",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "5X8L8h6jbjAVEDp1kis7muWNxj2ch33XZgeVKNNTqE1D",
+      "reserveY": "G5tjJ6WTGoK81vfo6BSWN1RT7cLzybwL1FyiwyrFjk5h",
+      "protocolFee": {
+        "amountX": "0",
+        "amountY": "0"
+      },
+      "binStep": 200,
+      "activeId": -371,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "62XTWBscCojU9YrZW8tHeNedZDegn7zxAvpqPtPjXyQz",
+      "parameters": {
+        "baseFactor": 10000,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 150000,
+        "volatilityReference": 0,
+        "indexReference": -337,
+        "lastUpdateTimestamp": "1721450886"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "7njcsocBqFhGXMt4DrQqfJRvryBAorUdQvGaoyGrbnL1",
+    "lbPair": {
+      "tokenXMint": "G6haJithfeUgSghVpu1rDPCq2NFiYcJFHNpHEANbpump",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "9syYXzrgYJYeJ7qquJqpgxNnT2mZWXTyYwaze5i5t6o6",
+      "reserveY": "D6wB6VLGTE8zQt6vd1PTRTForrYdd55KLrEN8ivGAscP",
+      "protocolFee": {
+        "amountX": "0",
+        "amountY": "0"
+      },
+      "binStep": 100,
+      "activeId": -376,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "8sL16mAsW1Dd5qpRQxh6zjF64UAv2LwimHjJsD1s9syL",
+      "parameters": {
+        "baseFactor": 20000,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 0,
+        "volatilityReference": 0,
+        "indexReference": -376,
+        "lastUpdateTimestamp": "1732988043"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "DAshPryesVqo7hG6wPAJRMEZiAmHZveH1vbHfEMWdgAE",
+    "lbPair": {
+      "tokenXMint": "4GJ3TCt5mTgQT5BRKb14AkjddpFQqKVfphxzS3t4foZ9",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "CpZXxN6ufiRtCF9aFsoEE4mgkUJrJkiayQxEcR7m5ZLT",
+      "reserveY": "BfaTiNHKTsesuVeFagSkz3aHPwwn4Sqm1kLpbFhwtw6u",
+      "protocolFee": {
+        "amountX": "0",
+        "amountY": "0"
+      },
+      "binStep": 200,
+      "activeId": -173,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "7AvTHmiE1vp3H9TLxFN8svpnMtxEAHzYjpDZRZybQ3uA",
+      "parameters": {
+        "baseFactor": 4000,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 0,
+        "volatilityReference": 0,
+        "indexReference": -173,
+        "lastUpdateTimestamp": "1718397518"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "7ev4gursoUJGwxWB2EmSDSwou48HYEWwp1BnvAtnv6K7",
+    "lbPair": {
+      "tokenXMint": "4pGgiDXE2UAJJ6evinsvorEKeusMBWPkdMz921nbp4a4",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "5gDJ1AgnoQgR8A4NUy7d2dZ96mKgTZPn1PjC56iBAETk",
+      "reserveY": "Eks8Ned1j88HSC4xSnSwDDbgz85aSVGKpmLdGD86sBmd",
+      "protocolFee": {
+        "amountX": "0",
+        "amountY": "0"
+      },
+      "binStep": 80,
+      "activeId": -1271,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "AcabYtrVD8W9ZRCgK9ZAAdFHDuHbKXpu7wtexVantgGB",
+      "parameters": {
+        "baseFactor": 2500,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 0,
+        "volatilityReference": 0,
+        "indexReference": 0,
+        "lastUpdateTimestamp": "0"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "Gh4uXmRsKnm9n2Xn8VPpjhSAeAriaECZAcCQdqhgfbfi",
+    "lbPair": {
+      "tokenXMint": "CUQrpNQJYWRLM2UqLzHfDWbwUmEjDJmbeyg3LzFfpump",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "rDpx6mhN23XTaaJWGrYLG8XNoJmgDvr3CsPxQsEACQZ",
+      "reserveY": "E8L7LwWjERfMVncoYhBYinyWTnBKuM79UtvShTZKjZ5V",
+      "protocolFee": {
+        "amountX": "0",
+        "amountY": "0"
+      },
+      "binStep": 400,
+      "activeId": -199,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "Bshmxdoizbjcq1iJa7qk2X4PynJM5xyin1zMgP75En2e",
+      "parameters": {
+        "baseFactor": 12500,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 2500,
+        "volatilityReference": 2500,
+        "indexReference": -199,
+        "lastUpdateTimestamp": "1718953036"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "6B7nf9nFgNaevez8XWYjmCP2RNDK2h6eJfkt85pBP8cK",
+    "lbPair": {
+      "tokenXMint": "2A5pPR44s1SbM1m8UTimY7R54BtxmfYyazwi6nF43372",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "HhdvXLisu2wQuBThvspHcazY7WHeVWZ1jKHBfUitcd7c",
+      "reserveY": "6KHY1qN3ZRNYfLUdhs1q8rLeFUrXS4RxJTCuA6PduRYn",
+      "protocolFee": {
+        "amountX": "752705",
+        "amountY": "87785"
+      },
+      "binStep": 100,
+      "activeId": -265,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "4SQV8UGsWai1QwKhFrFoaZ1gWcRjtyQCjBNgEaaEKyid",
+      "parameters": {
+        "baseFactor": 2000,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 0,
+        "volatilityReference": 0,
+        "indexReference": -265,
+        "lastUpdateTimestamp": "1738878907"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "8TJqabshVw6TFgk2Y6K5VYk5retvy3jVbMNxTziXwypC",
+    "lbPair": {
+      "tokenXMint": "4voSriVommQjWGpULifpwiywFZXdwuaTJ61qRU2mpump",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "833r4A6GJ8k6q11HWJALrP4QokuaTKX74zidmjt5eoro",
+      "reserveY": "Eu4cUgTLryah51q6Ne671dAfMBRunVbrhhv5k1UJDYyG",
+      "protocolFee": {
+        "amountX": "23236242747",
+        "amountY": "737133319"
+      },
+      "binStep": 100,
+      "activeId": -345,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "DdUHnJLKGVfJVfkXhuZxvqhxdqoCPsSPULyC9myc6yDs",
+      "parameters": {
+        "baseFactor": 20000,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 0,
+        "volatilityReference": 0,
+        "indexReference": -345,
+        "lastUpdateTimestamp": "1738924496"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "1729382256910270464",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "4fHeyYoFAgSGbnRhjm2mxYj8bZrMyCdDzGnew4TrbzZu",
+    "lbPair": {
+      "tokenXMint": "xyBshKyRVfwWpAWJ65JMcxpDuZerxJ8kFFKQGhxWFaZ",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "CuGXphak5bRJWNXnnhhtUhVtd8T9GSYTDhQTVLGH6Lbu",
+      "reserveY": "AFmMhNVvqWEQH3FKi4cPVRG9T9iG745ZGpvrRc1Vte1b",
+      "protocolFee": {
+        "amountX": "0",
+        "amountY": "0"
+      },
+      "binStep": 125,
+      "activeId": -419,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "DdWVqozXxXKXghxLKPKJV9gtVjcSHtRpfuZrxeQQWtzE",
+      "parameters": {
+        "baseFactor": 8000,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 150000,
+        "volatilityReference": 0,
+        "indexReference": -385,
+        "lastUpdateTimestamp": "1719157889"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "HBsmRf9iyExZuCTeiSpVB1xrVFdn1NnYcZxCAuiDkgd2",
+    "lbPair": {
+      "tokenXMint": "HUeFuQbrwR9P3vshUgB4dGjwDogKdWBiUPPU1rrBpump",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "Ew5PJTd5rXw18Uov8fDpJkwNG9i9c7LQAcE7FMoSD5aq",
+      "reserveY": "5wAkCTTJxwwHCozt65G1zCANF55YKkVsCaXZgXYqA9Po",
+      "protocolFee": {
+        "amountX": "0",
+        "amountY": "0"
+      },
+      "binStep": 20,
+      "activeId": -4558,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "5xhvs3c8DNRYKvHCmoQYWU97C4WVUALAPUaeM74wB53o",
+      "parameters": {
+        "baseFactor": 10000,
+        "filterPeriod": 30,
+        "decayPeriod": 600,
+        "reductionFactor": 5000,
+        "variableFeeControl": 20000,
+        "maxVolatilityAccumulator": 350000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 0,
+        "volatilityReference": 0,
+        "indexReference": 0,
+        "lastUpdateTimestamp": "0"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "5N1MJvqM7Cmz5VWTKirLhwKsssHmDGQFto84RygZXZiL",
+    "lbPair": {
+      "tokenXMint": "3s8x7TNPPcLiHGXNqg78b77uGyNqNKg5AyZm55Ftpump",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "7HxTjHiP2XvZTouZD8JvrtASnuDHDWPc71RscXG1S64Z",
+      "reserveY": "A9W91UpL9REiYR3Bvr296BhYX2rk3FfbX1GhFCrfxEjY",
+      "protocolFee": {
+        "amountX": "0",
+        "amountY": "0"
+      },
+      "binStep": 80,
+      "activeId": -365,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "YzNiT66W45aaFzYjV2yWg3cV9ukwAH36m2kSeosrEHa",
+      "parameters": {
+        "baseFactor": 62500,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 0,
+        "volatilityReference": 0,
+        "indexReference": 0,
+        "lastUpdateTimestamp": "0"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "2si6qqW4aoUyHRgFyJiy1mRrPk6uqmWcFKsNxv3he6kc",
+    "lbPair": {
+      "tokenXMint": "3B5wuUrMEi5yATD7on46hKfej3pfmd7t1RKgrsN3pump",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "HprADa9jR7eeSYNLZ1FxYBUqoq3nwGu7AHt9EJM9JYLQ",
+      "reserveY": "HJ8qHqn89sS3iNH74KAdEVY7ta8PRkYxN437m3su11VU",
+      "protocolFee": {
+        "amountX": "0",
+        "amountY": "0"
+      },
+      "binStep": 400,
+      "activeId": 1,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "FC6Rur1ddQ2uMNW8FNhwoz8Cg2yK3sNe42wD8AwoFpt6",
+      "parameters": {
+        "baseFactor": 12500,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 10000,
+        "volatilityReference": 0,
+        "indexReference": -7,
+        "lastUpdateTimestamp": "1720763640"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "6VQUTD8BeWh4kVAVcyL35J1jZ6RzeRvrS38EKxf4pKC8",
+    "lbPair": {
+      "tokenXMint": "BQoAJwRfvjzQKwDcL3y8bhWMcRthcVyRS9gUEXt1HUSA",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "2esmH48EzB2VbvLNUrGkfHUkbwmd1dH6TkwAwHDYCLde",
+      "reserveY": "5NT1Bc8jKgeq1BWVtLohEeUNiAeMHvC2ad1bsvxzUM3N",
+      "protocolFee": {
+        "amountX": "0",
+        "amountY": "0"
+      },
+      "binStep": 80,
+      "activeId": -393,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "NSR2rh79iyRVKMhqJRN8GsLqsDnGFem9QUUMefJverf",
+      "parameters": {
+        "baseFactor": 12500,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 150000,
+        "volatilityReference": 7706,
+        "indexReference": 505,
+        "lastUpdateTimestamp": "1723170933"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "2c5pgPNqqTvUik6efTcTpAg77xMhhFh8kYos8ZUuoruW",
+    "lbPair": {
+      "tokenXMint": "CyASSsRiwTch2p9PUeFXtiB5x8Zva7KYViDs7cobpump",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "B816VvMTozEGw6RJkmLqeEc6VtKLAAeQvksv3J9csjnu",
+      "reserveY": "7m2AA9bwQ5QKtjazcPfburRNm9yriXZ5nAxYgpF459Qy",
+      "protocolFee": {
+        "amountX": "0",
+        "amountY": "0"
+      },
+      "binStep": 250,
+      "activeId": -689,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "ESDw2w6V3gBq9ew7uUoSVW37iBKCWUZUpBAaDTfvcrUA",
+      "parameters": {
+        "baseFactor": 8000,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 0,
+        "volatilityReference": 0,
+        "indexReference": 0,
+        "lastUpdateTimestamp": "0"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "BkUeuQrj5sz9VBhgFnNHjhKz2hy9mzMrAX8F8r8qYmTE",
+    "lbPair": {
+      "tokenXMint": "M5MFPbS4X6eYek21xhFU38DTavMLuGY9eyC5p8Tpump",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "HyqKs4kawbzBwxi3fZVyizdDoLdcpwWs49g2ttLjjmCR",
+      "reserveY": "gtzswb8az6JGem5FQF3DxPknt26uC3JFWEKmyEtBcdh",
+      "protocolFee": {
+        "amountX": "665404895",
+        "amountY": "17522111"
+      },
+      "binStep": 100,
+      "activeId": -396,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "EohKVo3c1AK5BgZpDYNZWKkPxJYVnAepeFRdYB9Yw3rp",
+      "parameters": {
+        "baseFactor": 500,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 0,
+        "volatilityReference": 0,
+        "indexReference": -396,
+        "lastUpdateTimestamp": "1737600429"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "ASJErXM5rarGMuRPwBPnKQoJHgUXjx6i6Yua4MgL9yHS",
+    "lbPair": {
+      "tokenXMint": "9wQBQUFx5CQkkA2ocbQJ3Q1cyYyRtQdfQQtnh6qQpump",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "B6nSWNrCEt5Su5ML63PiDQyGqnpB4aAdSisFEqC6L9EM",
+      "reserveY": "Cskjpzq3yJYQo9aoj2uxTQWG7YsRfYMMTjfHmaPrzwA4",
+      "protocolFee": {
+        "amountX": "0",
+        "amountY": "0"
+      },
+      "binStep": 100,
+      "activeId": -634,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "HhBGxAbRiU55BwihKV6BzPEyBW2j1ycMrtTdz4FPUMJ",
+      "parameters": {
+        "baseFactor": 20000,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 0,
+        "volatilityReference": 0,
+        "indexReference": -634,
+        "lastUpdateTimestamp": "0"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "Afw453LLGVkDGk5VW85X6UFAo1dvE6vQa41aCea46TEd",
+    "lbPair": {
+      "tokenXMint": "9m8rkmFsvpXdQ9Wkrf8T6MtqghTrScrEnH4XowYQvcXD",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "AMLXgQF62ZDhRtErwbeZsH2ST8dZHuFo3dgUpBtFGKyv",
+      "reserveY": "W11iWTRhxwT9jjiFNu1Ks5jFJVUUDF3Hz9j7JXLQn56",
+      "protocolFee": {
+        "amountX": "0",
+        "amountY": "0"
+      },
+      "binStep": 80,
+      "activeId": -1701,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "DPwLx6xErzgsD7tDN92mUX9HUcf7YLfgHzrxNrTBipJS",
+      "parameters": {
+        "baseFactor": 62500,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 0,
+        "volatilityReference": 0,
+        "indexReference": 0,
+        "lastUpdateTimestamp": "0"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "6HXt8b2jA9sKhavaMFMVJCyHuZKfEA1fBuhKPD7H2Yff",
+    "lbPair": {
+      "tokenXMint": "3uHqdUgHvvXTpNN4nLemCueazKMTNtwBHeA83fUzpump",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "HtfdBjHFtTYffGfjALaFFj2tqGufAzZZz9vXpvx48XvH",
+      "reserveY": "5xop2Vh22251d55Kg75iMxikiToQey1YfL6HraW7sHrk",
+      "protocolFee": {
+        "amountX": "0",
+        "amountY": "0"
+      },
+      "binStep": 100,
+      "activeId": -705,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "ETcJNGzXQSCcWYSZZrbD8coVJ9zMHusejTGxJVoXH8cM",
+      "parameters": {
+        "baseFactor": 50000,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 77500,
+        "volatilityReference": 37500,
+        "indexReference": -701,
+        "lastUpdateTimestamp": "1722241925"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "EyhKaAcL6k4EHt2GqduM5cTX7Z9W1YxUBSXoYmqB5kw9",
+    "lbPair": {
+      "tokenXMint": "AdsCT1jcY7hWzeEkkph6kUVCqTCPLu5qZC759gJmpump",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "2vmZCTWhQrbHhUoGfHKbXNJcw96tfpwjLPD7MAwJ6RFa",
+      "reserveY": "4zBBLMhVEXmeozrmsWaXqq6MD3veWBFXuVaafsF93bny",
+      "protocolFee": {
+        "amountX": "0",
+        "amountY": "0"
+      },
+      "binStep": 125,
+      "activeId": -552,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "GwzqbYqYt1q4web5P3ABbAndeDcPnTZggNphSutQGWRH",
+      "parameters": {
+        "baseFactor": 40000,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 0,
+        "volatilityReference": 0,
+        "indexReference": -552,
+        "lastUpdateTimestamp": "1727576554"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "4cBFYL3HkGVjEjVKTMna6dxWoiwLLRD5JWNbK7dm4aSG",
+    "lbPair": {
+      "tokenXMint": "jUpa2aDCzvdR9EF4fqDXmuyMUkonPTohphABLmRkRFj",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "HAzbkZef89tB6c3Ektn4U9AqNAYXQtCFehyPVC6t7U1s",
+      "reserveY": "gfHeFBTr29WBDnqFRSo7YDS6dyEN94feaJ14g24W9Cp",
+      "protocolFee": {
+        "amountX": "0",
+        "amountY": "0"
+      },
+      "binStep": 80,
+      "activeId": -257,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "5ZrSds9PJC31xabekxz2PDAjdCVt3N5EMtXR46TgGb1P",
+      "parameters": {
+        "baseFactor": 62500,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 0,
+        "volatilityReference": 0,
+        "indexReference": 12,
+        "lastUpdateTimestamp": "0"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "q8UUZXTXo6Ar3Gxjug7JkHtY1Cvfv7ohmqgsrexpdiY",
+    "lbPair": {
+      "tokenXMint": "FRpTyMBDavKsdYN1FQZcEeZ2iwGvHaZKFSkvr5izpump",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "BveYsCMHxxcCsG3rox37oV2UrX5GTGB5kjZLy3w2nDJ9",
+      "reserveY": "8Wa9tfe3Bmvf6CJkXJ8JsojJ7UuvqyMh5fzvxwCTsgP1",
+      "protocolFee": {
+        "amountX": "0",
+        "amountY": "0"
+      },
+      "binStep": 100,
+      "activeId": -570,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "514nf4RczEX5sXPPKzBH76xDoW5xRumBFg7HjKy6Lbi3",
+      "parameters": {
+        "baseFactor": 20000,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 20000,
+        "volatilityReference": 0,
+        "indexReference": -568,
+        "lastUpdateTimestamp": "1734552208"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "864691128455135232",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "HC14HUZj1xxrn1AwXC9RdBv8fHRVE5KdRvhocTzT9pbc",
+    "lbPair": {
+      "tokenXMint": "7DHJrhWBHfDcMZqZ1ua38FZXuwBt2se2vSzT4p4Tv7d8",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "8RsxWFNquiQiYEzcvivgsywLPcPEfywMY59wqLw38h7F",
+      "reserveY": "7QX9TXbj38b9h9PP9F1iBLTnYNnFyy7RXQQUuVzQKEkf",
+      "protocolFee": {
+        "amountX": "72487776",
+        "amountY": "9546875"
+      },
+      "binStep": 400,
+      "activeId": -42,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "E8HKAeYscqthqCoZp3E8oFnNs9WanfuBh35DvdxacsXM",
+      "parameters": {
+        "baseFactor": 5000,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 25000,
+        "volatilityReference": 5000,
+        "indexReference": -44,
+        "lastUpdateTimestamp": "1737412336"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "6m94PPAQ1d5fDziwHGVXCpzvbTLn39iPZypRiMcrwsen",
+    "lbPair": {
+      "tokenXMint": "6AJcP7wuLwmRYLBNbi825wgguaPsWzPBEHcHndpRpump",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "4CVUt9aVtbWywsCs5RUpbajjStu7vcDabH1b6DAQ6JLd",
+      "reserveY": "4sUwdjNzQhYK14JGHtMBT5b8oZsDZMoswh3RfXamoqSJ",
+      "protocolFee": {
+        "amountX": "7338767",
+        "amountY": "11252324"
+      },
+      "binStep": 8,
+      "activeId": 441,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "7WoV9S3Sh5TNW9sWxyzt7VzvExfbKGWU5Sdh1R1zGYi3",
+      "parameters": {
+        "baseFactor": 6250,
+        "filterPeriod": 30,
+        "decayPeriod": 600,
+        "reductionFactor": 5000,
+        "variableFeeControl": 120000,
+        "maxVolatilityAccumulator": 300000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 300000,
+        "volatilityReference": 0,
+        "indexReference": 475,
+        "lastUpdateTimestamp": "1738029710"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "86vb45pVTpCL8BpGzrkcetXd2bSb2i7ZLyrSW45U7GhK",
+    "lbPair": {
+      "tokenXMint": "AynWbboR3Vec4oPa266HJxs8T7PAbWjH7aiZC3TVpump",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "9vaQnvPpukXY7eEKamivAeTZkNpQY5nSNkjqDbeQhMag",
+      "reserveY": "4mVDRMrXhmMQd5AMLHZgnZVFbsRA7cLLQmimQWByPX1W",
+      "protocolFee": {
+        "amountX": "27638472591",
+        "amountY": "452060"
+      },
+      "binStep": 400,
+      "activeId": -216,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "J8mCmVAx2ZnLwbpVhgCKro3Tp1K5nT2C2f41zdRpx5LT",
+      "parameters": {
+        "baseFactor": 12500,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 10312,
+        "volatilityReference": 312,
+        "indexReference": -215,
+        "lastUpdateTimestamp": "1739393360"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "3458764513820540928",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "publicKey": "BXfbJp1FJ1zRUZzwiastmMSaNfeXKBNPsKzRaaLMebzv",
+    "lbPair": {
+      "tokenXMint": "5WGkdemJNEoAVKveDQdzQmDqTyxCraXGw9ACyrwCEUMS",
+      "tokenYMint": "So11111111111111111111111111111111111111112",
+      "reserveX": "2AD97FdNqix5SWSPwiKX1GBRq93EY2R9ipPj3mcGDMqD",
+      "reserveY": "FQwAvi86FG9pjSfSEcLVjmVbT8MwKZGW9kcuZvWEWQ6C",
+      "protocolFee": {
+        "amountX": "0",
+        "amountY": "0"
+      },
+      "binStep": 250,
+      "activeId": -245,
+      "status": 0,
+      "pairType": 0,
+      "rewardInfos": [
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        },
+        {
+          "mint": "11111111111111111111111111111111",
+          "vault": {
+            "address": "11111111111111111111111111111111",
+            "balance": "0"
+          },
+          "funder": "11111111111111111111111111111111",
+          "rewardRate": "0",
+          "rewardDuration": "0",
+          "rewardDurationEnd": "0",
+          "lastUpdateTime": "0",
+          "cumulativeSecondsWithEmptyLiquidityReward": "0"
+        }
+      ],
+      "oracle": "C2oTrsxkFUpf4YkMCJ4CPJzzihZfFudQHZqiYQGQ2Xn7",
+      "parameters": {
+        "baseFactor": 4000,
+        "filterPeriod": 300,
+        "decayPeriod": 1200,
+        "reductionFactor": 5000,
+        "variableFeeControl": 7500,
+        "maxVolatilityAccumulator": 150000
+      },
+      "vParameters": {
+        "volatilityAccumulator": 0,
+        "volatilityReference": 0,
+        "indexReference": -245,
+        "lastUpdateTimestamp": "1732541564"
+      },
+      "binArrayBitmap": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  }
+]

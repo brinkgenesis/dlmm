@@ -571,142 +571,150 @@ dlmmClient.getUserPositions()  // Line 200-230
 - Multi-pool order support
 
 ## 7. Multi-Pool Management Architecture
-
-### 7.1 Core Implementation Changes
-
-**File Structure**:
-```tree
-src/
-├── utils/
-│   ├── DLMMClient.ts          # Modified
-├── managePosition.ts          # Modified  
-├── passiveProcess.ts          # Modified
-├── autoCompounder.ts          # Maintained
-└── models/
-    └── Config.ts              # Modified
-```
-
-**1. DLMMClient.ts Modifications**:
-```typescript:src/utils/DLMMClient.ts
-// Add program ID handling and cross-pool position scanning
-export class DLMMClient {
-  private programId: PublicKey;
-
-  constructor(config: Config) {
-    this.programId = new PublicKey(config.dlmmProgramId);
-    // ... existing constructor code ...
-  }
-
-  public async getAllUserPositions(): Promise<PositionInfo[]> {
-    const programAccounts = await this.connection.getProgramAccounts(
-      this.programId,
-      {filters: [{
-        memcmp: {
-          offset: 40, // Position account owner offset
-          bytes: this.config.walletKeypair.publicKey.toBase58()
-        }
-      }]}
-    );
-    
-    return Promise.all(programAccounts.map(async account => 
-      this.dlmmPool!.decodePosition(account.pubkey, account.account.data)
-    ));
-  }
-}
-```
-
-**2. managePosition.ts Changes**:
-```typescript:src/managePosition.ts
-export class PositionManager {
-  constructor(private dlmmClient: DLMMClient) {
-    this.riskManager = new RiskManager(dlmmClient);
-  }
-
-  public async monitorAndAdjust() {
-    setInterval(async () => {
-      const positions = await this.dlmmClient.getAllUserPositions();
-      positions.forEach(pos => {
-        this.riskManager.enforceCircuitBreaker(pos.poolAddress);
-      });
-    }, 30 * 60 * 1000);
-  }
-}
-```
-
-**3. passiveProcess.ts Updates**:
-```typescript:src/passiveProcess.ts
-export class PassiveProcessManager {
-  constructor(
-    private dlmmClient: DLMMClient,
-    private wallet: Keypair
-  ) {}
-
-  private scheduleAutoCompound() {
-    const interval = setInterval(async () => {
-      const positions = await this.dlmmClient.getAllUserPositions();
-      const uniquePools = [...new Set(positions.map(p => p.poolAddress))];
-      
-      uniquePools.forEach(poolAddress => {
-        const compounder = new AutoCompounder(
-          this.dlmmClient,
-          poolAddress,
-          this.wallet
-        );
-        compounder.autoCompound();
-      });
-    }, 60 * 60 * 1000);
-    this.intervalIds.push(interval);
-  }
-}
-```
-
-**4. Config.ts Addition**:
-```typescript:src/models/Config.ts
-export class Config {
-  // ... existing config properties ...
-  
-  public get dlmmProgramId(): string {
-    return process.env.DLMM_PROGRAM_ID!;
-  }
-}
-```
-
-### 7.2 Architectural Flow
-
+### Key Components:
 ```mermaid
 graph TD
-  A[PassiveProcessManager] --> B[getAllUserPositions]
-  B --> C[Extract Unique Pools]
-  C --> D[Create AutoCompounder per Pool]
-  D --> E[Pool 1 Claims+Compound]
-  D --> F[Pool 2 Claims+Compound]
-  D --> G[Pool N...]
+    A[PassiveProcessManager] --> B[PositionStorage]
+    A --> C[DLMMClient]
+    B --> D[PositionSnapshotService]
+    C --> E[RiskManager]
+    C --> F[AutoCompounder]
+    E --> G[Circuit Breakers]
+    F --> H[Reward Tracking]
 ```
 
-### 7.3 Implementation Notes
+### Enhanced Position Handling Flow:
+1. **Multi-Pool Initialization**
+```typescript
+// Initialize for ALL active pools
+const positions = await dlmmClient.getUserPositions();
+const activePools = [...new Set(positions.map(p => p.poolAddress))];
 
-1. **Initialization Pattern**:
-```typescript:src/index.ts
-// Single manager instance handles all pools
-const positionManager = new PositionManager(client);
-const passiveManager = new PassiveProcessManager(client, walletKeypair);
+activePools.forEach(poolAddress => {
+  const manager = new PassiveProcessManager(dlmmClient, wallet, poolAddress);
+  manager.startAll();
+});
 ```
 
-2. **Error Isolation**:
-- Each pool's operations run in separate try/catch blocks
-- Pool failures don't impact other pools
-- Independent retry logic per pool
+2. **Unified Position Metadata**
+```typescript
+interface AugmentedPosition {
+  publicKey: PublicKey;
+  poolAddress: PublicKey;
+  lbPair: {
+    tokenXMint: string;
+    tokenYMint: string;
+    binStep: number;
+    protocolFee: {
+      amountX: string;
+      amountY: string;
+    };
+  };
+  positionData: {
+    totalXAmount: BN;
+    totalYAmount: BN;
+    upperBinId: number;
+    lowerBinId: number;
+    feeX: BN;  // Unclaimed fees
+    feeY: BN;
+    totalClaimedFeeX: BN;
+    totalClaimedFeeY: BN;
+  };
+}
+```
 
-3. **Performance Considerations**:
-- Cached pool instances for reused pools
-- Parallel processing of non-conflicting pools
-- Shared connection for batch requests
+3. **Global Fee Tracking**
+```typescript
+// In PassiveProcessManager claim flow
+const claimTx = await dlmmClient.claimFees(position);
+console.log(`Claimed fees for ${position.publicKey}: 
+  X: ${claimTx.feeX.toString()} (Total claimed: ${position.totalClaimedFeeX})
+  Y: ${claimTx.feeY.toString()} (Total claimed: ${position.totalClaimedFeeY})`);
+```
 
-### 7.4 Benefits
-- Automatic discovery of new positions
-- Consistent risk management across pools
-- Shared resource utilization
-- Simplified monitoring interface
+4. **Cross-Pool Processes**
+```typescript
+// Modified process management
+startAllProcesses() {
+  this.scheduleGlobalRewardClaims();
+  this.scheduleCrossPoolCompounding();
+  this.schedulePortfolioRebalance();
+}
+
+private scheduleGlobalRewardClaims() {
+  setInterval(async () => {
+    const positions = await this.dlmmClient.getAllUserPositions();
+    positions.forEach(pos => this.processPosition(pos));
+  }, 3 * 3600 * 1000);
+}
+```
+
+### Key Changes from Initial Design:
+1. **Position-Centric vs Pool-Centric**
+   - Original: Single pool focus
+   - Current: Auto-discovers all positions across pools using `dlmmClient.getUserPositions()`
+
+2. **Unified Fee Accounting**
+   ```mermaid
+   sequenceDiagram
+       Participant U as User
+       Participant P as PassiveProcessManager
+       Participant D as DLMMClient
+       U->>P: Start processes
+       P->>D: getAllUserPositions()
+       D-->>P: PositionInfo[]
+       P->>P: Track fees per position
+       P->>D: claimAllRewards(position)
+       D-->>P: Updated fee totals
+   ```
+
+3. **Risk Management Integration**
+   ```typescript
+   // Applies to all active positions
+   async checkPortfolioRisk() {
+     const positions = await this.dlmmClient.getUserPositions();
+     const riskStatus = await Promise.all(
+       positions.map(pos => 
+         this.riskManager.checkDrawdown(pos.poolAddress, 15)
+       )
+     );
+     return riskStatus.some(Boolean);
+   }
+   ```
+
+4. **Data Flow Optimization**
+   - Removed redundant pool-specific initializations
+   - Centralized position metadata through `PositionStorage`
+   - Cross-position analytics using `PositionSnapshotService`
+
+### Updated Architecture Principles:
+1. **Position Discovery First**  
+   Automatically detect all active positions on initialization
+
+2. **Fee Lifecycle Tracking**  
+   Maintain complete history of:
+   - Unclaimed fees (`feeX/feeY`)
+   - Lifetime claimed fees (`totalClaimedFeeX/Y`)
+   - Pending rewards from reward vaults
+
+3. **Process Isolation**  
+   Each position/pool combination handles its own:
+   - Fee claims
+   - Risk checks
+   - Rebalancing logic
+
+4. **Unified Monitoring**  
+   ```typescript
+   interface GlobalState {
+     positions: AugmentedPosition[];
+     portfolioValue: number;
+     totalFeesEarned: {
+       X: BN;
+       Y: BN;
+     };
+     riskStatus: Map<string, boolean>;
+   }
+   ```
 
 ### 7.5 Monitoring Metrics
 | Metric                  | Calculation               | Alert Threshold |

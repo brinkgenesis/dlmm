@@ -1,31 +1,54 @@
-import { PublicKey, Keypair } from '@solana/web3.js';
-import { DLMMClient } from './utils/DLMMClient';
+import { PublicKey, Keypair, Connection } from '@solana/web3.js';
+import DLMM from '@meteora-ag/dlmm';
 import { unpackAccount, getAssociatedTokenAddress } from '@solana/spl-token';
+import { PositionStorage } from './utils/PositionStorage';
+import { createSingleSidePosition } from './utils/createSingleSidePosition';
+import { BN } from '@coral-xyz/anchor';
+import { sendAndConfirmTransaction } from '@solana/web3.js';
+import { Config } from './models/Config';
 
 export class AutoCompounder {
+  private positionStorage: PositionStorage;
+
   constructor(
-    private dlmmClient: DLMMClient,
-    private poolAddress: PublicKey,
-    private wallet: Keypair
-  ) {}
+    private connection: Connection,
+    private pool: DLMM,
+    private wallet: Keypair,
+    config: Config
+  ) {
+    this.positionStorage = new PositionStorage(config);
+  }
 
   public async autoCompound() {
     try {
       // 1. Claim rewards
-      const claimTxs = await this.dlmmClient.dlmmPool!.claimAllRewards({
+      const claimTxs = await this.pool.claimAllRewards({
         owner: this.wallet.publicKey,
         positions: await this.getUserPositions()
       });
 
-      // Directly send claim transactions using existing client method
+      // Send and confirm transactions using web3.js helper
       for (const tx of claimTxs) {
-        await this.dlmmClient.sendTransactionWithBackoff(tx, [this.wallet]);
+        const signature = await sendAndConfirmTransaction(
+          this.connection,
+          tx,
+          [this.wallet], // Only wallet signs claim transactions
+          { commitment: 'confirmed' }
+        );
+        console.log('✅ Rewards claimed:', signature);
       }
 
-      // 2. Get balance and create position
+      // 2. Create new position with balance
       const tokenXBalance = await this.getTokenXBalance();
       if (tokenXBalance > 0) {
-        await this.dlmmClient.createSingleSidePosition(tokenXBalance, true);
+        await createSingleSidePosition(
+          this.connection,
+          this.pool,
+          this.wallet,
+          new BN(tokenXBalance),
+          true,
+          this.positionStorage
+        );
       }
     } catch (error) {
       console.error('Auto-compound failed:', error);
@@ -33,27 +56,21 @@ export class AutoCompounder {
   }
 
   private async getUserPositions() {
-    const positions = await this.dlmmClient.getUserPositions();
-    return positions.map(p => p.lbPairPositionsData[0]);
+    const positionMap = await DLMM.getAllLbPairPositionsByUser(
+      this.connection,
+      this.wallet.publicKey
+    );
+    return positionMap.get(this.pool.pubkey.toBase58())?.lbPairPositionsData || [];
   }
 
   private async getTokenXBalance(): Promise<number> {
-    const tokenX = this.dlmmClient.dlmmPool!.tokenX;
+    const tokenX = this.pool.tokenX;
     const ataAddress = await getAssociatedTokenAddress(tokenX.publicKey, this.wallet.publicKey);
     
-    const accountInfo = await this.dlmmClient.connection.getAccountInfo(ataAddress);
+    const accountInfo = await this.connection.getAccountInfo(ataAddress);
     if (!accountInfo) return 0;
     
     const parsed = unpackAccount(ataAddress, accountInfo);
     return Number(parsed.amount) / Math.pow(10, tokenX.decimal);
-  }
-
-  private async createSingleSidePosition(amount: number) {
-    const activeBin = await this.dlmmClient.getActiveBin();
-    
-    return this.dlmmClient.createSingleSidePosition(
-      amount,
-      true // singleSidedX = true
-    );
   }
 } 

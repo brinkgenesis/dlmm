@@ -1,50 +1,56 @@
-import { ComputeBudgetProgram, Keypair, PublicKey, Transaction } from "@solana/web3.js";
-import { DLMMClient } from "./utils/DLMMClient";
+import { ComputeBudgetProgram, Keypair, PublicKey, Transaction, Connection } from "@solana/web3.js";
+import DLMM, { LbPosition } from '@meteora-ag/dlmm';
+import { initializeUserPools } from './utils/createMultiplePools';
 import { AutoCompounder } from './autoCompounder';
+import { Config } from './models/Config';
 
 export class PassiveProcessManager {
   private intervalIds: NodeJS.Timeout[] = [];
+  private initializedPools: DLMM[] = [];
   
   constructor(
-    private dlmmClient: DLMMClient,
-    private wallet: Keypair,
-    private poolAddress: PublicKey
+    private connection: Connection,
+    private wallet: Keypair
   ) {}
 
-  public startAll() {
-    this.scheduleRewardClaims();
+  public async startAll() {
+    // Initialize pools using the dedicated utility function with required parameters
+    const { initializedPools, positionMap } = await initializeUserPools(
+        this.connection,
+        this.wallet.publicKey
+    );
+    this.initializedPools = initializedPools;
+    
+    // Start scheduled tasks
+    this.scheduleRewardClaims(positionMap);
     this.scheduleAutoCompound();
   }
 
-  private scheduleRewardClaims() {
-    if (!this.dlmmClient.dlmmPool) {
-      throw new Error('DLMM Pool is not initialized. Call initializeDLMMPool() first.');
-    }
+  private scheduleRewardClaims(positionMap: Map<string, { lbPairPositionsData: LbPosition[] }>) {
     const interval = setInterval(async () => {
       try {
-        const positions = await this.dlmmClient.getUserPositions();
-        if (!positions.length) return;
-        
-        for (const position of positions) {
+        for (const pool of this.initializedPools) {
+          const poolKey = pool.pubkey.toBase58();
+          const positions = positionMap.get(poolKey)?.lbPairPositionsData || [];
+          
+          if (positions.length === 0) continue;
+
           try {
-            const claimTxs = await this.dlmmClient.dlmmPool!.claimAllRewards({
+            const claimTxs = await pool.claimAllRewards({
               owner: this.wallet.publicKey,
-              positions: [position.lbPairPositionsData[0]]
+              positions: positions
             });
-            
-            const transactions = claimTxs.map(tx => {
+
+            for (const tx of claimTxs) {
               const feeInstruction = ComputeBudgetProgram.setComputeUnitPrice({
                 microLamports: 30000
               });
-              return new Transaction().add(feeInstruction).add(...tx.instructions);
-            });
-        
-            for (const tx of transactions){
-            const signature = await this.dlmmClient.sendTransactionWithBackoff(tx, [this.wallet]);
-            console.log(`Claimed rewards for ${position.publicKey.toBase58()}: ${signature}`);
-          } }catch (positionError) {
-            console.error(`Failed to claim for ${position.publicKey.toBase58()}:`,
-              positionError instanceof Error ? positionError.message : positionError);
+              const transaction = new Transaction().add(feeInstruction).add(...tx.instructions);
+              const signature = await this.sendTransactionWithBackoff(transaction);
+              console.log(`Claimed rewards for pool ${poolKey}: ${signature}`);
+            }
+          } catch (error) {
+            console.error(`Failed to claim rewards for pool ${poolKey}:`, error);
           }
         }
       } catch (error) {
@@ -57,15 +63,24 @@ export class PassiveProcessManager {
 
   private scheduleAutoCompound() {
     const interval = setInterval(async () => {
-      const compounder = new AutoCompounder(
-        this.dlmmClient,
-        this.poolAddress,
-        this.wallet
-      );
-      await compounder.autoCompound();
-    }, 60 * 60 * 1000); // 1 hour
+      for (const pool of this.initializedPools) {
+        const compounder = new AutoCompounder(
+          this.connection,
+          pool,
+          this.wallet,
+          Config.load()
+        );
+        await compounder.autoCompound();
+      }
+    }, 60 * 60 * 1000);
     
     this.intervalIds.push(interval);
+  }
+
+  private async sendTransactionWithBackoff(tx: Transaction) {
+    const signature = await this.connection.sendTransaction(tx, [this.wallet]);
+    await this.connection.confirmTransaction(signature);
+    return signature;
   }
 
   public stopAll() {
