@@ -126,37 +126,129 @@
 
 ---
 
-## 6. Strategic Roadmap
-### Phase 1: Core Engine (Weeks 1-4)
-| Priority | Task                          | Code Reference              | Status  |
-|----------|-------------------------------|-----------------------------|---------|
-| P0       | Position Creation Engine      | DLMMClient.ts (363-477)     | ✅       |
-| P0       | Transaction Retry Logic       | DLMMClient.ts (316-352)     | ✅       |
-| P1       | Confidence Score Calculation  | confidence_score.ts         | ✅       |
-| P1       | DexScreener Data Integration   | token_data.ts               | ✅       |
+## 6. Order Management Architecture (New)
+### 6.1 System Overview
+```mermaid
+graph TD
+    A[OrderManager] --> B[Price Monitoring]
+    A --> C[Order Execution]
+    B --> D[60s Interval Check]
+    C --> E[DLMM Pool Operations]
+    E --> F[createPosition]
+    E --> G[removeLiquidity]
+    E --> H[closePosition]
+```
 
-- Position management system
-- Basic risk parameters
-- Single-sided strategy implementation
+### 6.2 Core Components
+**Order Configuration**:
+```typescript
+interface OrderConfig {
+  orderType: 'LIMIT'|'TAKE_PROFIT'|'STOP_LOSS';
+  triggerPrice: number;
+  positionSize?: number;
+  closeBps?: number; // 1-10000 (100% = 10000)
+  side?: 'X' | 'Y';
+}
+```
 
-### Phase 2: Data Layer (Weeks 5-7)
-| Priority | Task                          | Code Reference              | Status  |
-|----------|-------------------------------|-----------------------------|---------|
-| P1       | Holder Distribution Analysis  | blockchain_analyzer.ts (New)| ❌      |
-| P1       | Volatility Data Pipeline       | volatility_oracle.ts (New) | ❌      |
-| P2       | Historical Backtesting         | Backtester.ts               | ⏳      |
+**Execution Flow**:
+1. Price polling every 60 seconds via SDK's `getActiveBin()`
+2. Multi-order evaluation per cycle
+3. Atomic order execution using DLMM primitives
+4. Automatic order cleanup post-execution
 
-### Phase 3: Optimization (Weeks 8-9)
-| Priority | Task                          | Code Reference              | Status  |
-|----------|-------------------------------|-----------------------------|---------|
-| P1       | Dynamic Fee Model             | FeeModel.ts                 | ⏳      |
-| P2       | MEV Protection Layer          | MEVShield.ts                | ❌      |
+### 6.3 Order Types Matrix
+| Type          | Parameters          | Action                      | SDK Method          |
+|---------------|---------------------|-----------------------------|---------------------|
+| LIMIT         | size (USD), side    | Create single-sided position| createPosition()    |
+| TAKE_PROFIT   | closeBps (1-100)    | Partial/full liquidity exit | removeLiquidity()  |
+| STOP_LOSS     | closeBps (1-100)    | Emergency position unwind   | removeLiquidity()  |
 
-### Phase 4: Expansion (Weeks 10-12)
-| Priority | Task                          | Code Reference              | Status  |
-|----------|-------------------------------|-----------------------------|---------|
-| P2       | Cross-Pool Arbitrage          | ArbitrageEngine.ts          | ❌      |
-| P3       | Insurance Fund Integration    | RiskPool.ts                 | ❌      |
+---
+
+## 7. Multi-Pool Management
+### 7.1 Architecture Principles
+```mermaid
+graph LR
+    A[PassiveProcessManager] --> B[PositionStorage]
+    A --> C[DLMMClient]
+    B --> D[PositionSnapshotService]
+    C --> E[RiskManager]
+    C --> F[AutoCompounder]
+```
+
+### 7.2 Key Enhancements
+**Unified Position Handling**:
+```typescript
+interface AugmentedPosition {
+  publicKey: PublicKey;
+  poolAddress: PublicKey;
+  lbPair: {
+    tokenXMint: string;
+    tokenYMint: string;
+    binStep: number;
+  };
+  positionData: {
+    totalXAmount: BN;
+    totalYAmount: BN;
+    upperBinId: number;
+    lowerBinId: number;
+  };
+}
+```
+
+**Cross-Pool Initialization**:
+```typescript
+const positions = await dlmmClient.getUserPositions();
+const activePools = [...new Set(positions.map(p => p.poolAddress))];
+
+activePools.forEach(poolAddress => {
+  new PassiveProcessManager(dlmmClient, poolAddress)
+    .startBackgroundProcesses();
+});
+```
+
+---
+
+## 8. Implementation Checklist
+| Component              | Status | Details                                  | Code Reference         |
+|------------------------|--------|------------------------------------------|------------------------|
+| Order Manager          | ✅      | Limit/TP/SL order execution             | orderManager.ts        |
+| Multi-Pool Processes   | ✅      | Automated position discovery            | processManager.ts      |
+| Global Fee Tracking    | ⏳      | Cross-pool fee analytics                 | feeTracker.ts          |
+| Batch Order Execution  | ❌      | Atomic multi-order transactions          | orderBatching.ts      |
+
+---
+
+## 9. Monitoring Framework
+### 9.1 Key Metrics
+| Metric                  | Calculation               | Alert Threshold |
+|-------------------------|---------------------------|-----------------|
+| Active Orders           | OrderManager map size     | >50             |
+| Order Execution Latency | Price check → TX confirm  | >120s           |
+| Cross-Pool Exposure     | ∑(PositionValue) / Total  | >30% single pool|
+
+### 9.2 Alert Hierarchy Update
+**Level 2 (Enhanced)**:
+- Cross-pool liquidity imbalance >40%
+- Order failure rate >15%
+- Fee APY deviation >25%
+
+---
+
+## 10. Strategic Roadmap
+### Phase 5: Order Optimization (Q3 2024)
+| Priority | Task                          | Owner            | Status  |
+|----------|-------------------------------|------------------|---------|
+| P0       | Order Batching Engine         | Trading Team     | ❌      |
+| P1       | Slippage Protection           | Risk Team        | ⏳      |
+| P2       | Cross-Pool Balancing          | Research Team    | ❌      |
+
+### Phase 6: Advanced Analytics (Q4 2024)
+| Priority | Task                          | Owner            | Status  |
+|----------|-------------------------------|------------------|---------|
+| P1       | Predictive Order Flow         | Data Science     | ❌      |
+| P2       | ML-based Price Forecasting    | AI Team          | ❌      |
 
 ## Completed Features
 1. **Token Metrics Collection** (token_data.ts)
