@@ -6,6 +6,7 @@ import { BN } from 'bn.js';
 import { createSingleSidePosition } from './utils/createSingleSidePosition';
 import { PositionStorage } from './utils/PositionStorage';
 import { getSOLPrice } from "./utils/getSOLPrice";
+import { OrderStorage } from './utils/OrderStorage';
 
 
 type OrderType = 'LIMIT' | 'TAKE_PROFIT' | 'STOP_LOSS';
@@ -35,47 +36,89 @@ interface RequiredInputs {
 export class OrderManager {
   private activeOrders = new Map<string, OrderConfig>();
   private dlmm: Promise<DLMM>;
+  private orderStorage: OrderStorage;
+  private positionStorage: PositionStorage;
   
   constructor(
     private connection: Connection,
     private poolAddress: PublicKey,
     private userPublicKey: PublicKey,
     private wallet: Keypair,
-    private positionStorage: PositionStorage
+    positionStorage: PositionStorage,
   ) {
     this.dlmm = DLMM.create(connection, poolAddress);
+    this.orderStorage = new OrderStorage();
+    this.positionStorage = positionStorage;
+    this.initializeFromStorage();
   }
 
-  public addOrder(orderId: string, config: OrderConfig) {
-    this.activeOrders.set(orderId, config);
+  private async initializeFromStorage() {
+    const orders = await this.orderStorage.getActiveOrders();
+    Object.entries(orders).forEach(([orderId, order]) => {
+      if (order.poolAddress === this.poolAddress.toString()) {
+        this.activeOrders.set(orderId, order.config);
+      }
+    });
     this.startMonitoring();
+  }
+
+  public async addOrder(orderId: string, config: OrderConfig) {
+    await this.orderStorage.addOrder({
+      orderId,
+      config,
+      poolAddress: this.poolAddress.toString(),
+      createdAt: new Date().toISOString()
+    });
+    this.activeOrders.set(orderId, config);
   }
 
   private startMonitoring() {
     setInterval(async () => {
-      const currentPrice = await this.getCurrentPrice();
-      
-      for (const [orderId, config] of this.activeOrders) {
-        if (this.checkTriggerCondition(currentPrice, config)) {
-          await this.executeOrder(config);
-          this.activeOrders.delete(orderId);
+      try {
+        const currentPriceUSD = await this.getCurrentPriceUSD();
+        
+        for (const [orderId, config] of this.activeOrders) {
+          if (this.checkTriggerCondition(currentPriceUSD, config)) {
+            await this.executeOrder(orderId, config);
+            this.activeOrders.delete(orderId);
+          }
         }
+      } catch (error) {
+        console.error('Price monitoring error:', error);
       }
-    }, 60_000); // Check every minute
+    }, 60_000);
   }
 
-  private async getCurrentPrice(): Promise<number> {
+  private async getCurrentPriceUSD(): Promise<number> {
     const dlmm = await this.dlmm;
     const activeBin = await dlmm.getActiveBin();
-    return Number(activeBin.price);
+    const solPriceUSD = await getSOLPrice();
+    
+    // Get token price in SOL terms (1 token = X SOL)
+    const pricePerTokenSOL = parseFloat(activeBin.pricePerToken);
+    
+    // Convert to USD terms (1 token = X SOL * SOL/USD)
+    return pricePerTokenSOL * solPriceUSD;
   }
 
-  private checkTriggerCondition(currentPrice: number, config: OrderConfig): boolean {
-    // Implementation placeholder - add your trigger logic
-    return currentPrice >= config.triggerPrice;
+  private checkTriggerCondition(currentPriceUSD: number, config: OrderConfig): boolean {
+    const priceThreshold = config.triggerPrice;
+    const priceDifference = Math.abs(currentPriceUSD - priceThreshold);
+    const isWithinTolerance = priceDifference <= (priceThreshold * 0.01); // 1% tolerance
+    
+    switch(config.orderType) {
+      case 'LIMIT':
+        return currentPriceUSD <= priceThreshold && isWithinTolerance;
+      case 'TAKE_PROFIT':
+        return currentPriceUSD >= priceThreshold;
+      case 'STOP_LOSS':
+        return currentPriceUSD <= priceThreshold;
+      default:
+        return false;
+    }
   }
 
-  private async executeOrder(config: OrderConfig) {
+  private async executeOrder(orderId: string, config: OrderConfig) {
     if (config.orderType === 'LIMIT' && !config.side) {
       throw new Error('Limit orders require side (X/Y) specification');
     }
@@ -114,10 +157,13 @@ export class OrderManager {
         );
         break;
       case 'TAKE_PROFIT':
+        await this.handlePositionClose(config);
+        break;
       case 'STOP_LOSS':
         await this.handlePositionClose(config);
         break;
     }
+    await this.orderStorage.deleteOrder(orderId);
   }
 
   private async handlePositionClose(config: OrderConfig) {
