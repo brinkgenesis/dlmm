@@ -6,7 +6,7 @@ import { getTokenBalance } from '@meteora-ag/dlmm';
 import type { LbPairAccount } from '@meteora-ag/dlmm';
 
 async function testGetLbPairs() {
-  const config = Config.load();
+  const config = await Config.load();
   const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
   try {

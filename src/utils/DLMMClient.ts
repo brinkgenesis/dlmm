@@ -865,7 +865,7 @@ export class DLMMClient {
 // Conditional IIFE
 if (require.main === module) {
   (async () => {
-    const config = Config.load();
+    const config = await Config.load();
     const client = new DLMMClient(config);
     console.log('DLMMClient instance created from DLMMClient.ts directly.');
     // ... other initialization logic ...

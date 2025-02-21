@@ -15,7 +15,7 @@ export class PassiveProcessManager {
   ) {}
 
   public async startAll() {
-    const config = Config.load();
+    const config = await Config.load();
     const { initializedPools, positionMap } = await initializeUserPools(
         this.connection,
         this.wallet.publicKey
@@ -67,12 +67,13 @@ export class PassiveProcessManager {
 
   private scheduleAutoCompound() {
     const interval = setInterval(async () => {
+      const config = await Config.load();
       for (const pool of this.initializedPools) {
         const compounder = new AutoCompounder(
           this.connection,
           pool,
           this.wallet,
-          Config.load()
+          config
         );
         await compounder.autoCompound();
       }

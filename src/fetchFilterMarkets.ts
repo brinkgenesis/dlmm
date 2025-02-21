@@ -4,7 +4,7 @@ import { Connection } from '@solana/web3.js';
 import * as fs from 'fs';
 
 async function fetchAllMarkets() {
-  const config = Config.load();
+  const config = await Config.load();
   const client = new DLMMClient(config);
   
   try {

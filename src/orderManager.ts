@@ -1,4 +1,3 @@
-import { DLMMClient } from "./utils/DLMMClient";
 import { PublicKey, Keypair } from '@solana/web3.js';
 import  DLMM  from '@meteora-ag/dlmm';
 import { Connection } from '@solana/web3.js';
@@ -7,6 +6,7 @@ import { createSingleSidePosition } from './utils/createSingleSidePosition';
 import { PositionStorage } from './utils/PositionStorage';
 import { getSOLPrice } from "./utils/getSOLPrice";
 import { OrderStorage } from './utils/OrderStorage';
+import { Config } from './models/Config';
 
 
 type OrderType = 'LIMIT' | 'TAKE_PROFIT' | 'STOP_LOSS';
@@ -38,17 +38,21 @@ export class OrderManager {
   private dlmm: Promise<DLMM>;
   private orderStorage: OrderStorage;
   private positionStorage: PositionStorage;
+  private publicKey: PublicKey;
+  private poolAddress: PublicKey;
   
   constructor(
     private connection: Connection,
-    private poolAddress: PublicKey,
-    private userPublicKey: PublicKey,
-    private wallet: Keypair,
+    poolAddress: PublicKey,  // Pool's public key
+    private wallet: Keypair, // User's wallet
     positionStorage: PositionStorage,
+    private config: Config
   ) {
+    this.poolAddress = poolAddress;
     this.dlmm = DLMM.create(connection, poolAddress);
     this.orderStorage = new OrderStorage();
     this.positionStorage = positionStorage;
+    this.publicKey = wallet.publicKey;
     this.initializeFromStorage();
   }
 
@@ -174,7 +178,7 @@ export class OrderManager {
     const dlmm = await this.dlmm;
     
     // Get user positions for this pool
-    const { userPositions } = await dlmm.getPositionsByUserAndLbPair(this.userPublicKey);
+    const { userPositions } = await dlmm.getPositionsByUserAndLbPair(this.publicKey);
     
     await Promise.all(userPositions.map(async (position) => {
       // Determine bin range
@@ -190,7 +194,7 @@ export class OrderManager {
       const shouldClaimAndClose = config.closeBps === 100;
 
       return dlmm.removeLiquidity({
-        user: this.userPublicKey,
+        user: this.publicKey,
         position: position.publicKey,
         binIds,
         bps: bpsBN,

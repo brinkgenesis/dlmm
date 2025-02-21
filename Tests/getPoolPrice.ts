@@ -15,7 +15,7 @@ async function getSOLPrice(): Promise<number> {
 
 (async () => {
   try {
-    const config = Config.load();
+    const config = await Config.load();
     const connection = config.connection;
 
     const { poolAddress } = await inquirer.prompt([{

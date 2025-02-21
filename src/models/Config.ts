@@ -1,6 +1,7 @@
 import * as dotenv from 'dotenv';
 import { Keypair, Connection } from '@solana/web3.js';
 import bs58 from 'bs58';
+import fs from 'fs/promises';
 
 /**
  * Config class to manage application configuration.
@@ -27,14 +28,14 @@ export class Config {
   public liquidityRemovalLowerPercent: number;
 
   // New configuration flags
-  public autoClaimEnabled: boolean;
-  public autoCompoundEnabled: boolean;
+  public autoClaimEnabled = false;
+  public autoCompoundEnabled = false;
 
   private _poolPublicKey?: string;
 
   private static instance: Config | null = null;
 
-  private constructor(
+  public constructor(
     publickey: string,
     walletKeypair: Keypair,
     connection: Connection
@@ -57,17 +58,13 @@ export class Config {
     // Load percentage-based thresholds
     this.liquidityRemovalUpperPercent = parseFloat(process.env.LIQUIDITY_REMOVAL_UPPER_PERCENT!);
     this.liquidityRemovalLowerPercent = parseFloat(process.env.LIQUIDITY_REMOVAL_LOWER_PERCENT!);
-
-    // Load configuration flags
-    this.autoClaimEnabled = process.env.AUTO_CLAIM_ENABLED === 'true';
-    this.autoCompoundEnabled = process.env.AUTO_COMPOUND_ENABLED === 'true';
   }
 
   /**
    * Provides a single instance of Config.
    * Initializes the instance if it doesn't exist.
    */
-  static load(): Config {
+  static async load(): Promise<Config> {
     if (Config.instance) {
       return Config.instance;
     }
@@ -79,7 +76,13 @@ export class Config {
     const connection = Config.initializeConnection();
 
     Config.instance = new Config(publickey, walletKeypair, connection);
-    return Config.instance;
+
+    try {
+      const data = await fs.readFile('config.json', 'utf-8');
+      return Object.assign(Config.instance, JSON.parse(data));
+    } catch {
+      return Config.instance;
+    }
   }
 
   private static initializeKeypair(): Keypair {
@@ -120,5 +123,12 @@ export class Config {
       throw new Error('Pool Public Key has not been set.');
     }
     return this._poolPublicKey;
+  }
+
+  async save(): Promise<void> {
+    await fs.writeFile('config.json', JSON.stringify({
+      autoClaimEnabled: this.autoClaimEnabled,
+      autoCompoundEnabled: this.autoCompoundEnabled
+    }));
   }
 }

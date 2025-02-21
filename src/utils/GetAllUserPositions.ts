@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import BN from 'bn.js';
 
 async function GetAllUserPositions() {
-  const config = Config.load();
+  const config = await Config.load();
   const userPubKey = config.walletKeypair.publicKey;
 
   try {

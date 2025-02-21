@@ -17,7 +17,7 @@ import { PassiveProcessManager } from './passiveProcess';
 (async () => {
   try {
     // Load your configuration (Singleton)
-    const config = Config.load();
+    const config = await Config.load();
     console.log('Configuration loaded successfully.');
 
     // **Read markets.json**

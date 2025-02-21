@@ -8,7 +8,7 @@ import { FetchPrice } from '../src/utils/fetch_price';
 (async () => {
   try {
     // Load config and initialize connection
-    const config = Config.load();
+    const config = await Config.load();
     const connection = config.connection;
 
     // Get user input
