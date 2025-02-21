@@ -12,7 +12,7 @@ import { Config } from './models/Config';
 type OrderType = 'LIMIT' | 'TAKE_PROFIT' | 'STOP_LOSS';
 
 interface OrderConfig {
-  orderType: OrderType;
+  orderType: 'LIMIT' | 'TAKE_PROFIT' | 'STOP_LOSS';
   triggerPrice: number;
   closeBps?: number; // For partial closes (1-100)
   orderSize?: number; // Added for USD-based order sizing
@@ -203,4 +203,13 @@ export class OrderManager {
     }));
   }
 
+  public submitOrder(config: OrderConfig): string {
+    const orderId = this.generateOrderId();
+    this.addOrder(orderId, config);
+    return orderId;
+  }
+
+  private generateOrderId(): string {
+    return Math.random().toString(36).substr(2, 9);
+  }
 }

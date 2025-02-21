@@ -6,7 +6,7 @@ import { PositionStorage } from './utils/PositionStorage';
 
 export class TradingApp {
   private passiveManager?: PassiveProcessManager;
-  private orderManager?: OrderManager;
+  private orderManagers = new Map<string, OrderManager>(); // Map of poolAddress to OrderManager
   private config!: Config;
   private positionStorage!: PositionStorage;
 
@@ -22,9 +22,9 @@ export class TradingApp {
     this.positionStorage = new PositionStorage(this.config);
   }
 
-  public async initialize(poolAddress: PublicKey) {
+  public async initialize() {
+    // Initialize passive processes for ALL pools
     await this.initializePassiveProcesses();
-    this.initializeOrderManager(poolAddress);
   }
 
   private async initializePassiveProcesses() {
@@ -39,13 +39,14 @@ export class TradingApp {
   }
 
   private initializeOrderManager(poolAddress: PublicKey) {
-    this.orderManager = new OrderManager(
+    const orderManager = new OrderManager(
       this.connection,
       poolAddress,
       this.wallet,
       this.positionStorage,
       this.config
     );
+    this.orderManagers.set(poolAddress.toString(), orderManager);
   }
 
   // Frontend Controls
@@ -73,24 +74,20 @@ export class TradingApp {
   }
 
   // Order Submission
-  public async submitOrder(orderConfig: {
-    type: 'LIMIT' | 'TAKE_PROFIT' | 'STOP_LOSS';
+  public async submitOrder(poolAddress: PublicKey, orderConfig: {
+    orderType: 'LIMIT' | 'TAKE_PROFIT' | 'STOP_LOSS';
     triggerPrice: number;
     sizeUSD?: number;
     closeBps?: number;
     side?: 'X' | 'Y';
   }): Promise<string> {
-    if (!this.orderManager) throw new Error('Order manager not initialized');
+    // Get or create OrderManager for this pool
+    const poolKey = poolAddress.toString();
+    if (!this.orderManagers.has(poolKey)) {
+      this.initializeOrderManager(poolAddress);
+    }
+    const orderManager = this.orderManagers.get(poolKey)!;
     
-    const orderId = crypto.randomUUID();
-    await this.orderManager.addOrder(orderId, {
-      orderType: orderConfig.type,
-      triggerPrice: orderConfig.triggerPrice,
-      orderSize: orderConfig.sizeUSD,
-      closeBps: orderConfig.closeBps,
-      side: orderConfig.side
-    });
-    
-    return orderId;
+    return orderManager.submitOrder(orderConfig);
   }
 } 
