@@ -47,8 +47,10 @@ export async function initializeUserPools(
 
 // Run directly if executed as script
 if (require.main === module) {
-  initializeUserPools(Config.load().connection, Config.load().walletKeypair.publicKey).then(() => {
+  (async () => {
+    const config = await Config.load();
+    await initializeUserPools(config.connection, config.walletKeypair.publicKey);
     console.log('Pool initialization completed');
     process.exit(0);
-  }).catch(() => process.exit(1));
+  })().catch(() => process.exit(1));
 }
