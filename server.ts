@@ -3,11 +3,14 @@ import bodyParser from 'body-parser';
 import { Connection, Keypair, PublicKey } from '@solana/web3.js';
 import { TradingApp } from './src/app';
 import  limiter  from 'express-rate-limit';
+import bs58 from 'bs58';
+import * as dotenv from 'dotenv';
+dotenv.config();
 
 // Initialize core components
-const connection = new Connection(process.env.RPC_URL!);
+const connection = new Connection(process.env.SOLANA_RPC!);
 const wallet = Keypair.fromSecretKey(
-  Buffer.from(process.env.WALLET_SECRET!.split(',').map(Number))
+  bs58.decode(process.env.PRIVATE_KEY!)
 );
 const tradingApp = new TradingApp(connection, wallet);
 
@@ -25,7 +28,10 @@ app.post('/api/orders', async (req, res) => {
     );
     res.json({ success: true, orderId });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Unknown error occurred';
+    res.status(400).json({ error: errorMessage });
   }
 });
 

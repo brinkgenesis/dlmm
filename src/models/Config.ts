@@ -131,4 +131,15 @@ export class Config {
       autoCompoundEnabled: this.autoCompoundEnabled
     }));
   }
+
+  static loadSync(): Config {
+    if (!Config.instance) {
+      Config.instance = new Config(
+        process.env.PUBLIC_KEY!,
+        this.initializeKeypair(),
+        this.initializeConnection()
+      );
+    }
+    return Config.instance;
+  }
 }

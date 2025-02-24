@@ -7,18 +7,14 @@ import { PositionStorage } from './utils/PositionStorage';
 export class TradingApp {
   private passiveManager?: PassiveProcessManager;
   private orderManagers = new Map<string, OrderManager>(); // Map of poolAddress to OrderManager
-  private config!: Config;
+  private config: Config;
   private positionStorage!: PositionStorage;
 
   constructor(
-    private connection: Connection,
-    private wallet: Keypair
+    public connection: Connection,
+    public wallet: Keypair
   ) {
-    this.initializeConfig();
-  }
-
-  private async initializeConfig() {
-    this.config = await Config.load();
+    this.config = Config.loadSync();
     this.positionStorage = new PositionStorage(this.config);
   }
 
@@ -33,7 +29,7 @@ export class TradingApp {
       this.wallet
     );
     
-    if (this.isAnyPassiveEnabled()) {
+    if (this.isAnyPassiveEnabled) {
       await this.passiveManager.startAll();
     }
   }
@@ -69,7 +65,7 @@ export class TradingApp {
     await this.initializePassiveProcesses();
   }
 
-  private isAnyPassiveEnabled(): boolean {
+  private get isAnyPassiveEnabled(): boolean {
     return this.config.autoClaimEnabled || this.config.autoCompoundEnabled;
   }
 
