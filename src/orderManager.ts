@@ -123,51 +123,57 @@ export class OrderManager {
   }
 
   private async executeOrder(orderId: string, config: OrderConfig) {
-    if (config.orderType === 'LIMIT' && !config.side) {
-      throw new Error('Limit orders require side (X/Y) specification');
+    console.log('Executing order:', orderId);
+    try {
+      if (config.orderType === 'LIMIT' && !config.side) {
+        throw new Error('Limit orders require side (X/Y) specification');
+      }
+
+      switch(config.orderType) {
+        case 'LIMIT':
+          const dlmm = await this.dlmm;
+          const activeBin = await dlmm.getActiveBin();
+          
+          // Get pricing data
+          const solPrice = await getSOLPrice();
+          const pricePerToken = parseFloat(activeBin.pricePerToken);
+          const tokenPriceUSD = pricePerToken * solPrice;
+
+          // Determine token decimals
+          const singleSidedX = true; // Set based on your logic
+          const tokenDecimals = singleSidedX 
+            ? dlmm.tokenX.decimal 
+            : dlmm.tokenY.decimal;
+
+          console.log(`Token ${singleSidedX ? 'X' : 'Y'} decimals:`, tokenDecimals); //Decimal verification
+
+          // Convert USD to token amount
+          const tokenAmount = config.orderSize! / tokenPriceUSD;
+          const amountLamports = new BN(
+            tokenAmount * 10 ** tokenDecimals
+          );
+
+          await createSingleSidePosition(
+            this.connection,
+            dlmm,
+            this.wallet,
+            amountLamports,
+            singleSidedX,
+            this.positionStorage
+          );
+          break;
+        case 'TAKE_PROFIT':
+          await this.handlePositionClose(config);
+          break;
+        case 'STOP_LOSS':
+          await this.handlePositionClose(config);
+          break;
+      }
+      await this.orderStorage.deleteOrder(orderId);
+      console.log('Order executed successfully:', orderId);
+    } catch (error) {
+      console.error('Order execution failed:', orderId, error);
     }
-
-    switch(config.orderType) {
-      case 'LIMIT':
-        const dlmm = await this.dlmm;
-        const activeBin = await dlmm.getActiveBin();
-        
-        // Get pricing data
-        const solPrice = await getSOLPrice();
-        const pricePerToken = parseFloat(activeBin.pricePerToken);
-        const tokenPriceUSD = pricePerToken * solPrice;
-
-        // Determine token decimals
-        const singleSidedX = true; // Set based on your logic
-        const tokenDecimals = singleSidedX 
-          ? dlmm.tokenX.decimal 
-          : dlmm.tokenY.decimal;
-
-        console.log(`Token ${singleSidedX ? 'X' : 'Y'} decimals:`, tokenDecimals); //Decimal verification
-
-        // Convert USD to token amount
-        const tokenAmount = config.orderSize! / tokenPriceUSD;
-        const amountLamports = new BN(
-          tokenAmount * 10 ** tokenDecimals
-        );
-
-        await createSingleSidePosition(
-          this.connection,
-          dlmm,
-          this.wallet,
-          amountLamports,
-          singleSidedX,
-          this.positionStorage
-        );
-        break;
-      case 'TAKE_PROFIT':
-        await this.handlePositionClose(config);
-        break;
-      case 'STOP_LOSS':
-        await this.handlePositionClose(config);
-        break;
-    }
-    await this.orderStorage.deleteOrder(orderId);
   }
 
   private async handlePositionClose(config: OrderConfig) {

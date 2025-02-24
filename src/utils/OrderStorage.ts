@@ -20,6 +20,7 @@ export class OrderStorage {
 
   constructor() {
     this.filePath = path.join(__dirname, 'data', 'orders-mainnet.json');
+    console.log('OrderStorage initialized at:', this.filePath);
     this.initializeStorage();
   }
 
@@ -34,13 +35,17 @@ export class OrderStorage {
   public async addOrder(order: StoredOrder): Promise<void> {
     const orders = await this.loadOrders();
     orders[order.orderId] = order;
+    console.log('Saving order:', order.orderId);
     await this.saveOrders(orders);
   }
 
   public async deleteOrder(orderId: string): Promise<void> {
     const orders = await this.loadOrders();
-    delete orders[orderId];
-    await this.saveOrders(orders);
+    if (orders[orderId]) {
+      console.log('Deleting order:', orderId);
+      delete orders[orderId];
+      await this.saveOrders(orders);
+    }
   }
 
   public async getActiveOrders(): Promise<Record<string, StoredOrder>> {
@@ -48,11 +53,23 @@ export class OrderStorage {
   }
 
   private async loadOrders(): Promise<Record<string, StoredOrder>> {
-    const data = await fs.readFile(this.filePath, 'utf-8');
-    return JSON.parse(data);
+    try {
+      const data = await fs.readFile(this.filePath, 'utf-8');
+      console.log('Loaded orders from:', this.filePath);
+      return JSON.parse(data);
+    } catch (error) {
+      console.error('Error loading orders:', error);
+      return {};
+    }
   }
 
   private async saveOrders(orders: Record<string, StoredOrder>): Promise<void> {
-    await fs.writeFile(this.filePath, JSON.stringify(orders, null, 2), 'utf-8');
+    try {
+      await fs.writeFile(this.filePath, JSON.stringify(orders, null, 2), 'utf-8');
+      console.log('Successfully saved orders to:', this.filePath);
+    } catch (error) {
+      console.error('Failed to save orders:', error);
+      throw new Error('Failed to persist orders to storage');
+    }
   }
 } 
