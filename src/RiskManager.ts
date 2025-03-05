@@ -1,12 +1,13 @@
-import { DLMMClient } from './utils/DLMMClient';
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection, PublicKey, Keypair } from '@solana/web3.js';
 import { fetchTokenMetrics } from './utils/token_data';
 import { PositionSnapshotService } from './utils/positionSnapshot';
 import DLMM, { PositionInfo, BinLiquidity, StrategyType, PositionVersion, StrategyParameters, LbPosition, SwapQuote, computeBudgetIx } from '@meteora-ag/dlmm';
 import { FetchPrice } from './utils/fetch_price';
 import { VolumeData } from './utils/data/marketData';
-
-
+import { BN } from '@coral-xyz/anchor';
+import { ComputeBudgetProgram, sendAndConfirmTransaction } from '@solana/web3.js';
+import { PositionStorage } from './utils/PositionStorage';
+import { Config } from './models/Config';
 
 // Mock data generator for testing
 const MOCK_VOLUME_DATA: VolumeData[] = [
@@ -19,22 +20,120 @@ const MOCK_VOLUME_DATA: VolumeData[] = [
 ];
 
 export class RiskManager {
-  private snapshotService  = new PositionSnapshotService();
+  private snapshotService = new PositionSnapshotService();
   private lastAdjustmentTime: number = 0;
   private readonly COOLDOWN_PERIOD = 30 * 60 * 1000; // 30 minutes in ms
+  private dlmmInstances: Map<string, DLMM> = new Map();
+  private positionStorage: PositionStorage;
 
-  constructor(private dlmmClient: DLMMClient) {}
+  constructor(
+    private connection: Connection,
+    private wallet: Keypair,
+    private config: Config
+  ) {
+    this.positionStorage = new PositionStorage(config);
+  }
 
+  /**
+   * Gets or creates a DLMM instance for a specific pool
+   */
+  private async getDLMMInstance(poolAddress: PublicKey): Promise<DLMM> {
+    const poolKey = poolAddress.toString();
+    
+    if (!this.dlmmInstances.has(poolKey)) {
+      // Create a new DLMM instance for this pool
+      const dlmm = await DLMM.create(this.connection, poolAddress);
+      this.dlmmInstances.set(poolKey, dlmm);
+    }
+    
+    return this.dlmmInstances.get(poolKey)!;
+  }
+
+  /**
+   * Gets all user positions across all pools
+   */
+  public async getUserPositions(): Promise<Map<string, PositionInfo>> {
+    return DLMM.getAllLbPairPositionsByUser(
+      this.connection, 
+      this.wallet.publicKey
+    );
+  }
+
+  /**
+   * Enforces circuit breakers across all pools
+   */
+  public async enforceAllCircuitBreakers(): Promise<void> {
+    const now = Date.now();
+    if (now - this.lastAdjustmentTime < this.COOLDOWN_PERIOD) {
+      console.log('Still in cooldown period, skipping circuit breaker check');
+      return;
+    }
+
+    const positionsMap = await this.getUserPositions();
+    const positions = Array.from(positionsMap.values());
+    
+    // Group positions by pool address
+    const poolPositionsMap = new Map<string, PositionInfo[]>();
+    
+    for (const position of positions) {
+      // Get the pool address from the position
+      const poolAddress = position.publicKey.toString();
+      console.log(`Position found in pool: ${poolAddress}`);
+      
+      // Verify this is actually the pool address by logging some details
+      console.log(`Pool details - Token X: ${position.tokenX.publicKey.toString()}, Token Y: ${position.tokenY.publicKey.toString()}`);
+      
+      if (!poolPositionsMap.has(poolAddress)) {
+        poolPositionsMap.set(poolAddress, []);
+      }
+      poolPositionsMap.get(poolAddress)!.push(position);
+    }
+    
+    // Check drawdowns for each pool
+    let anyTriggered = false;
+    for (const [poolAddressStr, poolPositions] of poolPositionsMap.entries()) {
+      console.log(`Checking drawdown for pool: ${poolAddressStr} with ${poolPositions.length} positions`);
+      
+      const poolAddress = new PublicKey(poolAddressStr);
+      const triggered = await this.checkDrawdown(poolAddress, 15); // 15% drawdown threshold
+      
+      if (triggered) {
+        console.log(`⚠️ Circuit breaker triggered for pool: ${poolAddressStr}`);
+        anyTriggered = true;
+      } else {
+        console.log(`✅ No drawdown detected for pool: ${poolAddressStr}`);
+      }
+    }
+    
+    if (anyTriggered) {
+      this.lastAdjustmentTime = Date.now();
+      console.log(`Updated last adjustment time to: ${new Date(this.lastAdjustmentTime).toISOString()}`);
+    }
+  }
+
+  /**
+   * Checks for drawdowns in a specific pool
+   */
   public async checkDrawdown(poolAddress: PublicKey, thresholdPercent: number): Promise<boolean> {
-    const positions = await this.dlmmClient.getUserPositions();
-    const poolKeyStr = poolAddress.toBase58();
+    const positionsMap = await this.getUserPositions();
+    const positions = Array.from(positionsMap.values());
     
     let anyTriggered = false;
     
     for (const position of positions) {
       // Verify position belongs to target pool
+      const positionPoolAddress = position.publicKey.toString();
+      console.log(`Comparing position pool ${positionPoolAddress} with target pool ${poolAddress.toString()}`);
       
+      if (positionPoolAddress !== poolAddress.toString()) {
+        console.log('Position is for a different pool, skipping');
+        continue;
+      }
+      
+      console.log(`Checking drawdown for position in pool: ${poolAddress.toString()}`);
       const currentValue = await this.calculatePositionValue(position);
+      console.log(`Current position value: $${currentValue.toFixed(2)}`);
+      
       const positionKey = position.publicKey.toBase58();
 
       // Record per-position snapshot
@@ -42,17 +141,52 @@ export class RiskManager {
         value: currentValue,
         timestamp: Date.now()
       });
+      
+      // Update position storage with latest value
+      const storedPosition = this.positionStorage.getPositionRange(position.publicKey);
+      if (storedPosition) {
+        // Update existing position with new value
+        this.positionStorage.addPosition(position.publicKey, {
+          ...storedPosition,
+          snapshotPositionValue: currentValue
+        });
+        console.log(`Updated position ${positionKey} value to $${currentValue.toFixed(2)}`);
+      } else {
+        // If position not in storage yet, add it with basic info
+        const binIds = position.lbPairPositionsData[0].positionData.positionBinData.map(b => Number(b.binId));
+        const minBinId = Math.min(...binIds);
+        const maxBinId = Math.max(...binIds);
+        
+        this.positionStorage.addPosition(position.publicKey, {
+          originalActiveBin: 0, // We don't know this, but can set it to 0 or fetch it
+          minBinId,
+          maxBinId,
+          snapshotPositionValue: currentValue
+        });
+        console.log(`Added new position ${positionKey} to storage with value $${currentValue.toFixed(2)}`);
+      }
 
       // Check individual position drawdown
       const peakValue = await this.snapshotService.getPeakValue(
         positionKey,
         Date.now() - 30 * 60 * 1000
       );
+      
+      console.log(`Peak position value in last 30 minutes: $${peakValue.toFixed(2)}`);
 
-      if (peakValue > 0 && 
-        ((peakValue - currentValue) / peakValue) * 100 >= thresholdPercent) {
-        anyTriggered = true;
-        await this.adjustSinglePosition(position, 5000); // 50% reduction
+      if (peakValue > 0) {
+        const drawdownPercent = ((peakValue - currentValue) / peakValue) * 100;
+        console.log(`Drawdown percentage: ${drawdownPercent.toFixed(2)}%`);
+        
+        if (drawdownPercent >= thresholdPercent) {
+          console.log(`⚠️ Drawdown threshold exceeded: ${drawdownPercent.toFixed(2)}% > ${thresholdPercent}%`);
+          anyTriggered = true;
+          await this.adjustSinglePosition(position, 5000); // 50% reduction
+        } else {
+          console.log(`✅ Drawdown within acceptable range: ${drawdownPercent.toFixed(2)}% < ${thresholdPercent}%`);
+        }
+      } else {
+        console.log('No peak value found, position may be new');
       }
     }
 
@@ -60,74 +194,170 @@ export class RiskManager {
   }
 
   private async adjustSinglePosition(position: PositionInfo, bpsToRemove: number): Promise<void> {
-    const bins = position.lbPairPositionsData[0].positionData.positionBinData.map(b => 
-      Number(b.binId)
-    );
-    const binIdsToRemove = this.getFullBinRange(bins);
-    
-    await this.dlmmClient.removeLiquidity(
-      position.publicKey,
-      bpsToRemove,
-      binIdsToRemove,
-      false
-    );
-  }
+    try {
+      // Get the DLMM instance for this position's pool
+      const poolAddress = new PublicKey(position.lbPair.toString());
+      const dlmm = await this.getDLMMInstance(poolAddress);
+      
+      // Get all bin IDs from the position
+      const bins = position.lbPairPositionsData[0].positionData.positionBinData.map(b => 
+        Number(b.binId)
+      );
+      
+      // Get the full range of bins
+      const binIdsToRemove = this.getFullBinRange(bins);
+      
+      // Create the remove liquidity transaction
+      const txOrTxs = await dlmm.removeLiquidity({
+        user: this.wallet.publicKey,
+        position: position.publicKey,
+        bps: new BN(bpsToRemove),
+        binIds: binIdsToRemove
+      });
+      
+      if (Array.isArray(txOrTxs)) {
+        // Handle multiple transactions
+        for (const tx of txOrTxs) {
+          // Add priority fee
+          tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 30000 }));
+          
+          // Set recent blockhash
+          const { blockhash } = await this.connection.getLatestBlockhash('finalized');
+          tx.recentBlockhash = blockhash;
+          tx.feePayer = this.wallet.publicKey;
+          
+          // Sign and send
+          const signature = await sendAndConfirmTransaction(
+            this.connection, tx, [this.wallet], { skipPreflight: false, commitment: 'confirmed' }
+          );
+          console.log('Transaction Signature:', signature);
+        }
+      } else {
+        // Handle single transaction
+        txOrTxs.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 30000 }));
+        
+        // Set recent blockhash
+        const { blockhash } = await this.connection.getLatestBlockhash('finalized');
+        txOrTxs.recentBlockhash = blockhash;
+        txOrTxs.feePayer = this.wallet.publicKey;
+        
+        // Sign and send
+        const signature = await sendAndConfirmTransaction(
+          this.connection, txOrTxs, [this.wallet], { skipPreflight: false, commitment: 'confirmed' }
+        );
+        console.log('Transaction Signature:', signature);
+      }
 
-  public async enforceCircuitBreaker(poolAddress: PublicKey): Promise<void> {
-    const now = Date.now();
-    if (now - this.lastAdjustmentTime < this.COOLDOWN_PERIOD) return;
-
-    const triggered = await this.checkDrawdown(
-      poolAddress,
-      15
-    );
-
-    if (triggered) {
-      this.lastAdjustmentTime = Date.now();
+      // After successful adjustment, update the position value
+      const newValue = await this.calculatePositionValue(position);
+      const storedPosition = this.positionStorage.getPositionRange(position.publicKey);
+      
+      if (storedPosition) {
+        this.positionStorage.addPosition(position.publicKey, {
+          ...storedPosition,
+          snapshotPositionValue: newValue
+        });
+        console.log(`Updated position ${position.publicKey.toBase58()} value to $${newValue.toFixed(2)} after adjustment`);
+      }
+      
+      console.log(`Reduced position ${position.publicKey.toString()} by ${bpsToRemove/100}%`);
+    } catch (error) {
+      console.error('Error adjusting position:', error);
+      throw error;
     }
   }
 
   public async adjustPositionSize(bpsToRemove: number): Promise<void> {
-    const positions = await this.dlmmClient.getUserPositions();
+    const positionsMap = await this.getUserPositions();
+    const positions = Array.from(positionsMap.values());
+    
     if (!positions.length) return;
     
-    const position = positions[0];
-    const bins = position.lbPairPositionsData[0].positionData.positionBinData.map(b => 
-      Number(b.binId)
-    );
-    const binIdsToRemove = this.getFullBinRange(bins);
-    
-    await this.dlmmClient.removeLiquidity(
-      position.publicKey,
-      bpsToRemove,
-      binIdsToRemove,
-      false
-    );
+    for (const position of positions) {
+      await this.adjustSinglePosition(position, bpsToRemove);
+    }
   }
 
   public async checkVolumeDrop(threshold: number): Promise<boolean> {
-    const positions = await this.dlmmClient.getUserPositions();
+    const positionsMap = await this.getUserPositions();
+    const positions = Array.from(positionsMap.values());
+    
     if (!positions || positions.length === 0) return false;
-    const tokenMint = positions[0].tokenX.publicKey.toBase58();
-    const metrics = await fetchTokenMetrics('solana', tokenMint);
-    const volumeMA = await this.calculateVolumeMA(tokenMint);
-    return metrics.volumeMcapRatio < volumeMA * threshold;
+    
+    // Check volume for each token in positions
+    for (const position of positions) {
+      const tokenMint = position.tokenX.publicKey.toBase58();
+      const metrics = await fetchTokenMetrics('solana', tokenMint);
+      const volumeMA = await this.calculateVolumeMA(tokenMint);
+      
+      if (metrics.volumeMcapRatio < volumeMA * threshold) {
+        return true; // Volume drop detected for at least one token
+      }
+    }
+    
+    return false;
   }
 
   public async closeAllPositions(): Promise<void> {
-    const positions = await this.dlmmClient.getUserPositions();
+    const positionsMap = await this.getUserPositions();
+    const positions = Array.from(positionsMap.values());
+    
     if (!positions || positions.length === 0) return;
+    
     for (const position of positions) {
-      const bins = position.lbPairPositionsData[0].positionData.positionBinData.map(b => 
-        Number(b.binId)
-      );
-      const binIdsToRemove = this.getFullBinRange(bins);
-      await this.dlmmClient.removeLiquidity(
-        position.publicKey,
-        10000,
-        binIdsToRemove,
-        true
-      );
+      try {
+        const poolAddress = new PublicKey(position.lbPair.toString());
+        const dlmm = await this.getDLMMInstance(poolAddress);
+        
+        // Close the position completely
+        const txOrTxs = await dlmm.closePosition({
+          owner: this.wallet.publicKey,
+          position: position.lbPairPositionsData[0]  // Use the LbPosition object
+        });
+        
+        // Handle single transaction or array of transactions
+        if (Array.isArray(txOrTxs)) {
+          // Handle multiple transactions
+          for (const tx of txOrTxs) {
+            // Add priority fee
+            tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 30000 }));
+            
+            // Set recent blockhash
+            const { blockhash } = await this.connection.getLatestBlockhash('finalized');
+            tx.recentBlockhash = blockhash;
+            tx.feePayer = this.wallet.publicKey;
+            
+            // Sign and send
+            const signature = await sendAndConfirmTransaction(
+              this.connection, tx, [this.wallet], { skipPreflight: false, commitment: 'confirmed' }
+            );
+            console.log('Transaction Signature:', signature);
+          }
+        } else {
+          // Handle single transaction
+          txOrTxs.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 30000 }));
+          
+          // Set recent blockhash
+          const { blockhash } = await this.connection.getLatestBlockhash('finalized');
+          txOrTxs.recentBlockhash = blockhash;
+          txOrTxs.feePayer = this.wallet.publicKey;
+          
+          // Sign and send
+          const signature = await sendAndConfirmTransaction(
+            this.connection, txOrTxs, [this.wallet], { skipPreflight: false, commitment: 'confirmed' }
+          );
+          console.log('Transaction Signature:', signature);
+        }
+        
+        console.log(`Closed position ${position.publicKey.toString()}`);
+        
+        // After successful closure, remove the position from storage
+        this.positionStorage.removePosition(position.publicKey);
+        console.log(`Removed position ${position.publicKey.toBase58()} from storage after closing`);
+        
+      } catch (error) {
+        console.error(`Error closing position ${position.publicKey.toString()}:`, error);
+      }
     }
   }
 
@@ -157,23 +387,34 @@ export class RiskManager {
   }
 
   private async calculatePositionValue(position: PositionInfo): Promise<number> {
-    const [solPrice, activeBin] = await Promise.all([
-      this.getSOLPrice(),
-      this.dlmmClient.getActiveBin()
-    ]);
+    try {
+      const poolAddress = new PublicKey(position.lbPair.toString());
+      const dlmm = await this.getDLMMInstance(poolAddress);
+      
+      // Get the active bin to determine current price
+      const { activeBin, bins } = await dlmm.getBinsAroundActiveBin(0, 0);
+      const activeBinData = bins[0];
+      
+      const [solPrice] = await Promise.all([
+        this.getSOLPrice()
+      ]);
 
-    const lbPosition = position.lbPairPositionsData[0];
-    const { tokenX, tokenY } = position;
+      const lbPosition = position.lbPairPositionsData[0];
+      const { tokenX, tokenY } = position;
 
-    // Convert amounts using token decimals
-    const xAmount = Number(lbPosition.positionData.totalXAmount) / 10 ** tokenX.decimal;
-    const yAmount = Number(lbPosition.positionData.totalYAmount) / 10 ** tokenY.decimal;
-     
-    // Convert price from BN to number
-    const pricePerToken = Number(activeBin.price) / 
-      (10 ** (tokenX.decimal + tokenY.decimal));
+      // Convert amounts using token decimals
+      const xAmount = Number(lbPosition.positionData.totalXAmount) / 10 ** tokenX.decimal;
+      const yAmount = Number(lbPosition.positionData.totalYAmount) / 10 ** tokenY.decimal;
+       
+      // Convert price from BN to number
+      const pricePerToken = Number(activeBinData.price) / 
+        (10 ** (tokenX.decimal + tokenY.decimal));
 
-    return (xAmount * pricePerToken) + (yAmount * solPrice);
+      return (xAmount * pricePerToken) + (yAmount * solPrice);
+    } catch (error) {
+      console.error('Error calculating position value:', error);
+      return 0;
+    }
   }
 
   private async getSOLPrice(): Promise<number> {

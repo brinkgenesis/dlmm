@@ -1,0 +1,13 @@
+{
+  "ha75u9hep": {
+    "orderId": "ha75u9hep",
+    "config": {
+      "orderType": "LIMIT",
+      "triggerPrice": 9.34,
+      "sizeUSD": 10,
+      "side": "X"
+    },
+    "poolAddress": "CopraAQegh7HohkLgYayjoRENXsf66eYaDtwFpbr8zRZ",
+    "createdAt": "2025-02-26T19:39:58.923Z"
+  }
+}
