@@ -11,33 +11,51 @@ export class TradingApp {
   private config: Config;
   private positionStorage!: PositionStorage;
   private riskManager!: RiskManager;
+  private riskMonitoringInterval?: NodeJS.Timeout;
 
   constructor(
     public connection: Connection,
     public wallet: Keypair
   ) {
+    console.log('Starting DLMM Manager...');
     this.config = Config.loadSync();
+    console.log('Config loaded successfully');
+    
     this.positionStorage = new PositionStorage(this.config);
+    console.log('Position storage initialized');
+    
     // Initialize global risk manager with the updated parameters
     this.riskManager = new RiskManager(this.connection, this.wallet, this.config);
+    console.log('Risk manager initialized');
   }
 
   public async initialize() {
+    console.log('Initializing All Other Functions..');
+    
     // Initialize passive processes for ALL pools
     await this.initializePassiveProcesses();
     
-    // Start position safety monitoring
-    await this.startPositionSafetyMonitoring();
+    // Start risk management monitoring
+    this.startRiskManagement();
+    
+    console.log('✅ TradingApp fully initialized with all managers running');
   }
 
   private async initializePassiveProcesses() {
+    console.log('Initializing passive processes...');
+    
     this.passiveManager = new PassiveProcessManager(
       this.connection,
       this.wallet
     );
+    console.log('Passive process manager created');
     
     if (this.isAnyPassiveEnabled) {
+      console.log('Auto-claim or auto-compound enabled, starting passive processes...');
       await this.passiveManager.startAll();
+      console.log('✅ Passive processes started successfully');
+    } else {
+      console.log('No passive processes enabled in config');
     }
   }
 
@@ -52,27 +70,40 @@ export class TradingApp {
     this.orderManagers.set(poolAddress.toString(), orderManager);
   }
 
-  private async startPositionSafetyMonitoring() {
+  /**
+   * Starts the risk management system to monitor and protect positions
+   */
+  private startRiskManagement() {
+    console.log('Initializing risk management system...');
+    
+    // Clear any existing interval
+    if (this.riskMonitoringInterval) {
+      clearInterval(this.riskMonitoringInterval);
+      console.log('Cleared existing risk monitoring interval');
+    }
+    
     // Start global monitoring for all positions
-    setInterval(async () => {
+    this.riskMonitoringInterval = setInterval(async () => {
       try {
-        // Use the new enforceAllCircuitBreakers method
+        console.log('Running scheduled risk management check...');
+        
+        // Enforce circuit breakers across all pools
         await this.riskManager.enforceAllCircuitBreakers();
         
         // Also check for volume drops across all positions
         const volumeDropDetected = await this.riskManager.checkVolumeDrop(0.5);
         if (volumeDropDetected) {
-          console.warn("Volume drop detected! Consider reducing position sizes.");
-          // Could trigger automatic reduction here if desired
-          // await this.riskManager.adjustPositionSize(5000); // 50% reduction
+          console.warn("⚠️ Volume drop detected! Reducing position sizes by 25%");
+          await this.riskManager.adjustPositionSize(2500); // 25% reduction
         }
         
+        console.log('Risk management check completed');
       } catch (error) {
-        console.error('Position safety monitoring error:', error);
+        console.error('Risk management monitoring error:', error);
       }
     }, 15 * 60 * 1000); // 15 minute interval
     
-    console.log('Position safety monitoring started');
+    console.log('✅ Risk management system initialized and monitoring started (15-minute intervals)');
   }
 
   // Frontend Controls
@@ -116,29 +147,6 @@ export class TradingApp {
     
     return orderManager.submitOrder(orderConfig);
   }
-
-  // Method to manually trigger risk assessment
-  public async assessRisk(poolAddress?: PublicKey): Promise<boolean> {
-    if (poolAddress) {
-      // Check specific pool
-      return this.riskManager.checkDrawdown(poolAddress, 15);
-    } else {
-      // Use the new enforceAllCircuitBreakers method
-      await this.riskManager.enforceAllCircuitBreakers();
-      return false; // We don't know if any were triggered, so return false
-    }
-  }
-  
-  // Method to check volume drops across all positions
-  public async checkVolumeDrops(threshold: number = 0.5): Promise<boolean> {
-    return this.riskManager.checkVolumeDrop(threshold);
-  }
-  
-  // Emergency method to close all positions
-  public async emergencyCloseAll(): Promise<void> {
-    return this.riskManager.closeAllPositions();
-  }
-
   /**
    * Emergency method to close all positions
    * This will be called from the frontend
@@ -186,5 +194,21 @@ export class TradingApp {
   public initializeApi(app: any): void {
     this.setupEmergencyEndpoints(app);
     // Other API setup...
+  }
+  
+  // Method to stop all monitoring and processes
+  public shutdown() {
+    console.log('Shutting down TradingApp...');
+    
+    // Clear risk monitoring interval
+    if (this.riskMonitoringInterval) {
+      clearInterval(this.riskMonitoringInterval);
+      this.riskMonitoringInterval = undefined;
+    }
+    
+    // Stop passive processes
+    this.passiveManager?.stopAll();
+    
+    console.log('TradingApp shutdown complete');
   }
 } 
