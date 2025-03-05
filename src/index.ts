@@ -137,7 +137,7 @@ import { PassiveProcessManager } from './passiveProcess';
     const positionManager = new PositionManager(client, poolPublicKey);
     positionManager.monitorAndAdjust(); // Starts 30m interval
    
-    const passiveManager = new PassiveProcessManager(client, client.config.walletKeypair, poolPublicKey);
+    const passiveManager = new PassiveProcessManager(client.connection, config.walletKeypair);
     passiveManager.startAll();
   } catch (error: any) {
     if (error instanceof SendTransactionError) {
