@@ -69,6 +69,9 @@ export class RiskManager {
       return;
     }
 
+    // Sync positions with chain before checking
+    await this.syncPositionsWithChain();
+
     const positionsMap = await this.getUserPositions();
     const positions = Array.from(positionsMap.values());
     
@@ -400,7 +403,7 @@ export class RiskManager {
 
   private async calculatePositionValue(position: PositionInfo): Promise<number> {
     try {
-      // The position's lbPair should have a publicKey property that refers to the pool
+      // The position's publicKey refers to the pool
       const poolAddress = position.publicKey;
       
       if (!poolAddress) {
@@ -411,25 +414,61 @@ export class RiskManager {
       const dlmm = await this.getDLMMInstance(poolAddress);
       
       // Get the active bin to determine current price
-      const { activeBin, bins } = await dlmm.getBinsAroundActiveBin(0, 0);
-      const activeBinData = bins[0];
+      const activeBinData = await dlmm.getActiveBin();
+      console.log(`Pool ${poolAddress.toString()} - Active bin: ${activeBinData.binId}, Price: ${activeBinData.price.toString()}`);
+      
+      // Use pricePerToken which should be correctly formatted
+      const pricePerToken = Number(activeBinData.pricePerToken);
+      console.log(`Price per token: $${pricePerToken}`);
       
       const [solPrice] = await Promise.all([
         this.getSOLPrice()
       ]);
 
       const lbPosition = position.lbPairPositionsData[0];
+      console.log(`Position data - X amount: ${lbPosition.positionData.totalXAmount.toString()}, Y amount: ${lbPosition.positionData.totalYAmount.toString()}`);
+      
       const { tokenX, tokenY } = position;
+      console.log(`Token decimals - X: ${tokenX.decimal}, Y: ${tokenY.decimal}`);
 
       // Convert amounts using token decimals
       const xAmount = Number(lbPosition.positionData.totalXAmount) / 10 ** tokenX.decimal;
       const yAmount = Number(lbPosition.positionData.totalYAmount) / 10 ** tokenY.decimal;
+      console.log(`Converted amounts - X: ${xAmount}, Y: ${yAmount}`);
        
-      // Convert price from BN to number
-      const pricePerToken = Number(activeBinData.price) / 
-        (10 ** (tokenX.decimal + tokenY.decimal));
-
-      return (xAmount * pricePerToken) + (yAmount * solPrice);
+      // Calculate token values
+      let totalValue = 0;
+      
+      // If Y is SOL
+      if (tokenY.publicKey.toString() === 'So11111111111111111111111111111111111111112') {
+        // X value in USD = X amount * price per token * SOL price in USD
+        const xValueInUsd = xAmount * pricePerToken * solPrice;
+        // Y value in USD = Y amount * SOL price in USD
+        const yValueInUsd = yAmount * solPrice;
+        
+        console.log(`Value calculation - X value: $${xValueInUsd.toFixed(4)}, Y value: $${yValueInUsd.toFixed(4)}`);
+        totalValue = xValueInUsd + yValueInUsd;
+      } 
+      // If X is SOL
+      else if (tokenX.publicKey.toString() === 'So11111111111111111111111111111111111111112') {
+        // X value in USD = X amount * SOL price in USD
+        const xValueInUsd = xAmount * solPrice;
+        // Y value in USD = Y amount / price per token * SOL price in USD
+        const yValueInUsd = yAmount / pricePerToken * solPrice;
+        
+        console.log(`Value calculation - X value: $${xValueInUsd.toFixed(4)}, Y value: $${yValueInUsd.toFixed(4)}`);
+        totalValue = xValueInUsd + yValueInUsd;
+      }
+      // For other token pairs, we would need external price data
+      else {
+        console.log('Non-SOL pair detected, using placeholder values');
+        // Placeholder calculation
+        totalValue = (xAmount + yAmount) * 1.0;
+      }
+      
+      console.log(`Total position value: $${totalValue.toFixed(4)}`);
+      
+      return totalValue;
     } catch (error) {
       console.error('Error calculating position value:', error);
       return 0;
@@ -451,5 +490,76 @@ export class RiskManager {
       fullRange.push(i);
     }
     return fullRange;
+  }
+
+  /**
+   * Synchronizes the stored positions with the actual positions on-chain.
+   * Removes any positions from storage that no longer exist.
+   */
+  public async syncPositionsWithChain(): Promise<void> {
+    try {
+      console.log('Synchronizing stored positions with on-chain data...');
+      
+      // Get all positions from storage
+      const storedPositions = this.positionStorage.getAllPositions();
+      const storedPositionKeys = Object.keys(storedPositions);
+      console.log(`Found ${storedPositionKeys.length} positions in storage`);
+      
+      // Get all positions from chain
+      const positionsMap = await this.getUserPositions();
+      const activePositions = Array.from(positionsMap.values());
+      const activePositionKeys = activePositions.map(pos => 
+        pos.publicKey.toString()
+      );
+      console.log(`Found ${activePositionKeys.length} active positions on-chain`);
+      
+      // Find positions that are in storage but not on-chain
+      const positionsToRemove = storedPositionKeys.filter(
+        key => !activePositionKeys.includes(key)
+      );
+      
+      // Remove obsolete positions
+      if (positionsToRemove.length > 0) {
+        console.log(`Removing ${positionsToRemove.length} obsolete positions from storage:`);
+        positionsToRemove.forEach(key => {
+          console.log(`- Removing position: ${key}`);
+          this.positionStorage.removePosition(new PublicKey(key));
+        });
+        console.log('Position storage synchronized successfully');
+      } else {
+        console.log('No obsolete positions found in storage');
+      }
+      
+      // Add any new positions that are on-chain but not in storage
+      const newPositions = activePositions.filter(
+        pos => !storedPositionKeys.includes(pos.publicKey.toString())
+      );
+      
+      if (newPositions.length > 0) {
+        console.log(`Adding ${newPositions.length} new positions to storage:`);
+        for (const position of newPositions) {
+          const positionValue = await this.calculatePositionValue(position);
+          console.log(`- Adding position: ${position.publicKey.toString()} with value: $${positionValue.toFixed(4)}`);
+          
+          // Get the position's bin range
+          const binIds = position.lbPairPositionsData[0].positionData.positionBinData.map(b => Number(b.binId));
+          const minBinId = Math.min(...binIds);
+          const maxBinId = Math.max(...binIds);
+          
+          this.positionStorage.addPosition(position.publicKey, {
+            originalActiveBin: 0, // We don't know this, but can set it to 0 or fetch it
+            minBinId,
+            maxBinId,
+            snapshotPositionValue: positionValue
+          });
+        }
+        console.log('New positions added to storage');
+      } else {
+        console.log('No new positions found on-chain');
+      }
+      
+    } catch (error) {
+      console.error('Error synchronizing positions:', error);
+    }
   }
 }

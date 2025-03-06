@@ -1,49 +1,14 @@
 {
-  "HTHPsxL683bfgCsPPMUiBU1KhZpHjUcvkpf1RRZTrcC8": {
-    "originalActiveBin": 133,
-    "minBinId": 100,
-    "maxBinId": 166
-  },
-  "CcG3EXqEkDVG2TumKqZgPLLYwmsdibtvjQwHwSd7ELfQ": {
-    "originalActiveBin": 132,
-    "minBinId": 99,
-    "maxBinId": 165
-  },
-  "8pZ7ovYddSSZJbUUer6osSPKpjD4mFhDQ2263rpH3BR6": {
-    "originalActiveBin": 127,
-    "minBinId": 94,
-    "maxBinId": 160
-  },
-  "FrkJVajgdUAHKhUWGobCCdF5C9vFeLh9JWFi1iYfX3ek": {
-    "originalActiveBin": 127,
-    "minBinId": 94,
-    "maxBinId": 160
-  },
-  "FW1agTrRJcTYNoQi5SER6fHeKnooPLTHctzN1sCYrjJi": {
-    "originalActiveBin": 133,
-    "minBinId": 100,
-    "maxBinId": 166
-  },
-  "C72EChrxTZvJVhpBJxE9ABjVcF7A7ToVqrCxYiBQh3RN": {
-    "originalActiveBin": 152,
-    "minBinId": 119,
-    "maxBinId": 185
-  },
-  "D2uSsRp18LSJEQBYsmvWwGnX1Tk26kXg359P3sRU5i3K": {
-    "originalActiveBin": 165,
-    "minBinId": 132,
-    "maxBinId": 198
-  },
   "68NfGyJSewnqj5ySuk6tD3VkfgWdRC1VqmyXAKUgkERU": {
     "originalActiveBin": 0,
     "minBinId": -354,
     "maxBinId": -286,
-    "snapshotPositionValue": 14.5979424199076
+    "snapshotPositionValue": 14.297984700510966
   },
   "CuhfMFrxwvtBXutitksd729hNjLhdzcdyzFj7RFYt6VT": {
     "originalActiveBin": 0,
     "minBinId": 132,
     "maxBinId": 198,
-    "snapshotPositionValue": 7.150068213440914e-15
+    "snapshotPositionValue": 1.0123363906158918
   }
 }

@@ -11,6 +11,7 @@ import * as fs from 'fs';
  * 
  * Commands:
  * - check: Run circuit breaker checks on all positions
+ * - sync: Synchronize positions with the chain
  * - volume: Check for volume drops
  * - reduce: Reduce all positions by 25%
  * - close: Close all positions (EMERGENCY)
@@ -46,6 +47,11 @@ async function main() {
         await riskManager.enforceAllCircuitBreakers();
         break;
         
+      case 'sync':
+        console.log('Synchronizing positions with chain...');
+        await riskManager.syncPositionsWithChain();
+        break;
+        
       case 'volume':
         console.log('Checking for volume drops...');
         const volumeDropDetected = await riskManager.checkVolumeDrop(0.5);
@@ -64,7 +70,7 @@ async function main() {
         
       default:
         console.log(`Unknown command: ${command}`);
-        console.log('Available commands: check, volume, reduce, close');
+        console.log('Available commands: check, sync, volume, reduce, close');
     }
     
     console.log('✅ RiskManager test completed');
