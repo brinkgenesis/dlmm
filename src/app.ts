@@ -38,7 +38,7 @@ export class TradingApp {
     // Start risk management monitoring
     this.startRiskManagement();
     
-    console.log('✅ TradingApp fully initialized with all managers running');
+    console.log('✅ DLMM Manager fully initialized with all managers running');
   }
 
   private async initializePassiveProcesses() {

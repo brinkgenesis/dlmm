@@ -196,7 +196,13 @@ export class RiskManager {
   private async adjustSinglePosition(position: PositionInfo, bpsToRemove: number): Promise<void> {
     try {
       // Get the DLMM instance for this position's pool
-      const poolAddress = new PublicKey(position.lbPair.toString());
+      const poolAddress = position.publicKey;
+      
+      if (!poolAddress) {
+        console.error('Pool address not found in position data');
+        return;
+      }
+      
       const dlmm = await this.getDLMMInstance(poolAddress);
       
       // Get all bin IDs from the position
@@ -306,7 +312,13 @@ export class RiskManager {
     
     for (const position of positions) {
       try {
-        const poolAddress = new PublicKey(position.lbPair.toString());
+        const poolAddress = position.publicKey;
+        
+        if (!poolAddress) {
+          console.error('Pool address not found in position data');
+          continue;
+        }
+        
         const dlmm = await this.getDLMMInstance(poolAddress);
         
         // Close the position completely
@@ -388,7 +400,14 @@ export class RiskManager {
 
   private async calculatePositionValue(position: PositionInfo): Promise<number> {
     try {
-      const poolAddress = new PublicKey(position.lbPair.toString());
+      // The position's lbPair should have a publicKey property that refers to the pool
+      const poolAddress = position.publicKey;
+      
+      if (!poolAddress) {
+        console.error('Pool address not found in position data');
+        return 0;
+      }
+      
       const dlmm = await this.getDLMMInstance(poolAddress);
       
       // Get the active bin to determine current price
