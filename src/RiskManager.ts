@@ -139,21 +139,50 @@ export class RiskManager {
       
       const positionKey = position.publicKey.toBase58();
 
-      // Record per-position snapshot
-      await this.snapshotService.recordSnapshot(positionKey, {
-        value: currentValue,
-        timestamp: Date.now()
-      });
-      
-      // Update position storage with latest value
+      // Get the current active bin
+      const dlmm = await this.getDLMMInstance(position.publicKey);
+      const activeBin = await dlmm.getActiveBin();
+      const activeBinId = activeBin.binId;
+      console.log(`Current active bin ID: ${activeBinId}`);
+
+      // Get stored position data from positions.json
       const storedPosition = this.positionStorage.getPositionRange(position.publicKey);
+      
       if (storedPosition) {
-        // Update existing position with new value
-        this.positionStorage.addPosition(position.publicKey, {
+        // Get the previous snapshot value
+        const previousValue = storedPosition.snapshotPositionValue || 0;
+        console.log(`Previous position value from storage: $${previousValue.toFixed(2)}`);
+        
+        // Calculate drawdown percentage from previous value
+        const drawdownPercent = previousValue > 0 
+          ? ((previousValue - currentValue) / previousValue) * 100 
+          : 0;
+        console.log(`Drawdown percentage: ${drawdownPercent.toFixed(2)}%`);
+        
+        // Store the current value for next comparison AFTER checking drawdown
+        const updatedPosition = {
           ...storedPosition,
-          snapshotPositionValue: currentValue
-        });
-        console.log(`Updated position ${positionKey} value to $${currentValue.toFixed(2)}`);
+          originalActiveBin: activeBinId
+        };
+        
+        if (drawdownPercent >= thresholdPercent) {
+          console.log(`⚠️ Drawdown threshold exceeded: ${drawdownPercent.toFixed(2)}% > ${thresholdPercent}%`);
+          anyTriggered = true;
+          await this.adjustSinglePosition(position, 5000); // 50% reduction
+          
+          // After adjustment, get the new position value
+          const adjustedValue = await this.calculatePositionValue(position);
+          updatedPosition.snapshotPositionValue = adjustedValue;
+          console.log(`Position adjusted, new value: $${adjustedValue.toFixed(2)}`);
+        } else {
+          console.log(`✅ Drawdown within acceptable range: ${drawdownPercent.toFixed(2)}% < ${thresholdPercent}%`);
+          // Only update the snapshot value if no action was taken
+          updatedPosition.snapshotPositionValue = currentValue;
+        }
+        
+        // Update position storage with new active bin and snapshot value
+        this.positionStorage.addPosition(position.publicKey, updatedPosition);
+        console.log(`Updated position ${positionKey} snapshot value to $${updatedPosition.snapshotPositionValue.toFixed(2)} and active bin to ${activeBinId}`);
       } else {
         // If position not in storage yet, add it with basic info
         const binIds = position.lbPairPositionsData[0].positionData.positionBinData.map(b => Number(b.binId));
@@ -161,35 +190,12 @@ export class RiskManager {
         const maxBinId = Math.max(...binIds);
         
         this.positionStorage.addPosition(position.publicKey, {
-          originalActiveBin: 0, // We don't know this, but can set it to 0 or fetch it
+          originalActiveBin: activeBinId, // Store current active bin
           minBinId,
           maxBinId,
           snapshotPositionValue: currentValue
         });
-        console.log(`Added new position ${positionKey} to storage with value $${currentValue.toFixed(2)}`);
-      }
-
-      // Check individual position drawdown
-      const peakValue = await this.snapshotService.getPeakValue(
-        positionKey,
-        Date.now() - 30 * 60 * 1000
-      );
-      
-      console.log(`Peak position value in last 30 minutes: $${peakValue.toFixed(2)}`);
-
-      if (peakValue > 0) {
-        const drawdownPercent = ((peakValue - currentValue) / peakValue) * 100;
-        console.log(`Drawdown percentage: ${drawdownPercent.toFixed(2)}%`);
-        
-        if (drawdownPercent >= thresholdPercent) {
-          console.log(`⚠️ Drawdown threshold exceeded: ${drawdownPercent.toFixed(2)}% > ${thresholdPercent}%`);
-          anyTriggered = true;
-          await this.adjustSinglePosition(position, 5000); // 50% reduction
-        } else {
-          console.log(`✅ Drawdown within acceptable range: ${drawdownPercent.toFixed(2)}% < ${thresholdPercent}%`);
-        }
-      } else {
-        console.log('No peak value found, position may be new');
+        console.log(`Added new position ${positionKey} to storage with value $${currentValue.toFixed(2)} and active bin ${activeBinId}`);
       }
     }
 

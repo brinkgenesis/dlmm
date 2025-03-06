@@ -35,7 +35,30 @@
   - Volume <50% 6h MA → Full exit
   - Social sentiment <0.4 → 75% exit
 
-### 2.2 Volatility Response System
+### 2.2 Risk Management Implementation
+- **Position Value Tracking**:
+  - Accurate position valuation using `getActiveBin().pricePerToken`
+  - SOL price oracle integration for USD conversions
+  - Proper token decimal normalization
+
+- **Drawdown Detection**:
+  - Continuous position value monitoring
+  - Snapshot comparison for drawdown calculation
+  - Automatic position reduction on threshold breach
+
+- **Position Synchronization**:
+  - Automatic on-chain position discovery
+  - Storage cleanup for closed positions
+  - Active bin tracking for price movement analysis
+
+- **Volume Monitoring**:
+  - 6-hour moving average calculation
+  - Volume/MCap ratio threshold checks
+  - Emergency exit on volume collapse
+
+**Implementation Status**: ✅ Completed
+
+### 2.3 Volatility Response System
 - **Fee Adaptation**:
   - 0.3% base fee
   - +0.1% per 0.2 volatility accumulator increase
