@@ -4,6 +4,7 @@ import { Connection, Keypair, PublicKey } from '@solana/web3.js';
 import { Config } from './models/Config';
 import { PositionStorage } from './utils/PositionStorage';
 import { RiskManager } from './riskManager';
+import { RebalanceManager } from './rebalanceManager';
 
 export class TradingApp {
   private passiveManager?: PassiveProcessManager;
@@ -11,7 +12,9 @@ export class TradingApp {
   private config: Config;
   private positionStorage!: PositionStorage;
   private riskManager!: RiskManager;
+  private rebalanceManager!: RebalanceManager;
   private riskMonitoringInterval?: NodeJS.Timeout;
+  private rebalanceInterval?: NodeJS.Timeout;
 
   constructor(
     public connection: Connection,
@@ -27,6 +30,10 @@ export class TradingApp {
     // Initialize global risk manager with the updated parameters
     this.riskManager = new RiskManager(this.connection, this.wallet, this.config);
     console.log('Risk manager initialized');
+    
+    // Initialize rebalance manager
+    this.rebalanceManager = new RebalanceManager(this.connection, this.wallet, this.config);
+    console.log('Rebalance manager initialized');
   }
 
   public async initialize() {
@@ -37,6 +44,9 @@ export class TradingApp {
     
     // Start risk management monitoring
     this.startRiskManagement();
+    
+    // Start rebalance monitoring
+    this.startRebalanceMonitoring();
     
     console.log('✅ DLMM Manager fully initialized with all managers running');
   }
@@ -104,6 +114,34 @@ export class TradingApp {
     }, 15 * 60 * 1000); // 15 minute interval
     
     console.log('✅ Risk management system initialized and monitoring started (15-minute intervals)');
+  }
+
+  /**
+   * Starts the rebalance monitoring system
+   */
+  private startRebalanceMonitoring() {
+    console.log('Initializing rebalance monitoring system...');
+    
+    // Clear any existing interval
+    if (this.rebalanceInterval) {
+      clearInterval(this.rebalanceInterval);
+      console.log('Cleared existing rebalance monitoring interval');
+    }
+    
+    // Run an initial check
+    this.rebalanceManager.checkAndRebalancePositions();
+    
+    // Start periodic monitoring
+    this.rebalanceInterval = setInterval(() => {
+      try {
+        console.log('Running scheduled rebalance check...');
+        this.rebalanceManager.checkAndRebalancePositions();
+      } catch (error) {
+        console.error('Rebalance monitoring error:', error);
+      }
+    }, 30 * 60 * 1000); // 30 minute interval
+    
+    console.log('✅ Rebalance monitoring system initialized (30-minute intervals)');
   }
 
   // Frontend Controls
@@ -204,6 +242,12 @@ export class TradingApp {
     if (this.riskMonitoringInterval) {
       clearInterval(this.riskMonitoringInterval);
       this.riskMonitoringInterval = undefined;
+    }
+    
+    // Clear rebalance monitoring interval
+    if (this.rebalanceInterval) {
+      clearInterval(this.rebalanceInterval);
+      this.rebalanceInterval = undefined;
     }
     
     // Stop passive processes
