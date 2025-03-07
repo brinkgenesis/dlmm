@@ -321,6 +321,33 @@ public async autoCompound() {
   }
 }
 ```
+## 11. Position Rebalancing System
+### 11.1 Rebalancing Triggers
+- **Range Breach Detection**:
+  - Active bin moves outside position range (min/max binId)
+  - Price moves >70% through allocated range
+  - Bin utilization imbalance >80% in single direction
+
+- **Rebalancing Actions**:
+  - Close existing position (removeLiquidity + closePosition)
+  - Calculate new optimal range around current active bin
+  - Re-create position with balanced liquidity distribution
+  - Update position storage with new range parameters
+
+### 11.2 Implementation Architecture
+
+
+### 11.3 Rebalancing Parameters
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| Range Breach Threshold | 0% | Trigger when activeBin ≤ minBinId or ≥ maxBinId |
+| Range Proximity Warning | 70% | Alert when price approaches range edge |
+| Cooldown Period | 6h | Minimum time between rebalances |
+| New Range Width | 138 bins | ±69 bins from current active bin |
+| Strategy Type | Based on original | Maintain same strategy type |
+
+**Implementation Status**: ⏳ In Progress
+
 
 ## Pending Requirements
 1. **Additional Data Sources**:
