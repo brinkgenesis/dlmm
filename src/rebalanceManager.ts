@@ -138,7 +138,7 @@ export class RebalanceManager {
   }
 
   /**
-   * Closes all positions in a specific pool
+   * Closes all positions in a specific pool and creates new single-sided positions
    */
   private async closeAllPositionsInPool(poolAddress: PublicKey, positions: PositionInfo[]): Promise<void> {
     try {
@@ -146,18 +146,47 @@ export class RebalanceManager {
       
       const dlmm = await this.getDLMMInstance(poolAddress);
       
+      // Get current active bin
+      const activeBin = await dlmm.getActiveBin();
+      const activeBinId = activeBin.binId;
+      
       for (const position of positions) {
         const positionKey = position.publicKey.toString();
         console.log(`Closing position ${positionKey}...`);
         
         try {
+          // Store position data for recreating later
+          const storedPosition = this.positionStorage.getPositionRange(position.publicKey);
+          let singleSidedX: boolean;
+          
+          if (storedPosition) {
+            // Determine if we should create X or Y single-sided position
+            if (activeBinId < storedPosition.minBinId) {
+              // Active bin is below min bin - we hold X tokens
+              singleSidedX = true;
+              console.log(`Active bin ${activeBinId} < min bin ${storedPosition.minBinId}, will create X-sided position`);
+            } else {
+              // Active bin is above max bin - we hold Y tokens (SOL)
+              singleSidedX = false;
+              console.log(`Active bin ${activeBinId} > max bin ${storedPosition.maxBinId}, will create Y-sided position`);
+            }
+          } else {
+            // Default to X-sided if no stored position data
+            singleSidedX = true;
+            console.log(`No stored position data, defaulting to X-sided position`);
+          }
+          
+          // Store token amounts before removing liquidity
+          const positionData = position.lbPairPositionsData[0].positionData;
+          const totalXAmount = positionData.totalXAmount;
+          const totalYAmount = positionData.totalYAmount;
+          console.log(`Position has ${totalXAmount.toString()} X tokens and ${totalYAmount.toString()} Y tokens`);
+          
           // 1. Remove liquidity
           console.log(`Removing liquidity from position ${positionKey}...`);
           
           // Get all bin IDs from the position
-          const binIds = position.lbPairPositionsData[0].positionData.positionBinData.map(b => 
-            Number(b.binId)
-          );
+          const binIds = positionData.positionBinData.map(b => Number(b.binId));
           
           // Create the remove liquidity transaction
           const txOrTxs = await dlmm.removeLiquidity({
@@ -230,6 +259,16 @@ export class RebalanceManager {
           this.positionStorage.removePosition(position.publicKey);
           console.log(`Position ${positionKey} removed from storage`);
           
+          // 4. Create new single-sided position
+          if (singleSidedX) {
+            // Use the X amount from the position we just closed
+            await this.createSingleSidePosition(dlmm, poolAddress, true, new BN(totalXAmount.toString()), new BN(0));
+          } else {
+            // Use 1 SOL for Y-sided position
+            const oneSol = new BN(1_000_000_000); // 1 SOL in lamports
+            await this.createSingleSidePosition(dlmm, poolAddress, false, new BN(0), oneSol);
+          }
+          
         } catch (error) {
           console.error(`Error closing position ${positionKey}:`, error);
         }
@@ -237,6 +276,92 @@ export class RebalanceManager {
       
     } catch (error) {
       console.error(`Error closing positions in pool ${poolAddress.toString()}:`, error);
+    }
+  }
+
+  /**
+   * Creates a new single-sided position
+   */
+  private async createSingleSidePosition(
+    dlmm: DLMM, 
+    poolAddress: PublicKey, 
+    singleSidedX: boolean,
+    totalXAmount: BN = new BN(0),
+    totalYAmount: BN = new BN(0)
+  ): Promise<void> {
+    try {
+      console.log(`Creating new single-sided position (${singleSidedX ? 'X' : 'Y'}-sided) in pool ${poolAddress.toString()}...`);
+      
+      // Get current active bin
+      const activeBin = await dlmm.getActiveBin();
+      const activeBinId = activeBin.binId;
+      
+      // Calculate bin range
+      const totalRangeInterval = 69;
+      let minBinId: number;
+      let maxBinId: number;
+      
+      if (singleSidedX) {
+        // For X-sided positions, set range above active bin
+        minBinId = activeBinId;
+        maxBinId = activeBinId + totalRangeInterval;
+        console.log(`Using ${totalXAmount.toString()} X tokens for new position`);
+      } else {
+        // For Y-sided positions, set range below active bin
+        minBinId = activeBinId - totalRangeInterval;
+        maxBinId = activeBinId;
+        console.log(`Using ${totalYAmount.toString()} Y tokens (1 SOL) for new position`);
+      }
+      
+      console.log(`New position bin range: [${minBinId}, ${maxBinId}]`);
+      
+      // Create strategy parameters
+      const strategy: StrategyParameters = {
+        minBinId,
+        maxBinId,
+        strategyType: StrategyType.BidAskImBalanced,
+        singleSidedX
+      };
+      
+      // Generate new position keypair
+      const newPositionKeypair = Keypair.generate();
+      
+      // Create the new position
+      const createTx = await dlmm.initializePositionAndAddLiquidityByStrategy({
+        positionPubKey: newPositionKeypair.publicKey,
+        totalXAmount,
+        totalYAmount,
+        strategy,
+        user: this.wallet.publicKey
+      });
+      
+      // Add priority fee
+      createTx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 30000 }));
+      
+      // Set recent blockhash
+      const { blockhash } = await this.connection.getLatestBlockhash('finalized');
+      createTx.recentBlockhash = blockhash;
+      createTx.feePayer = this.wallet.publicKey;
+      
+      // Sign and send
+      const signature = await sendAndConfirmTransaction(
+        this.connection, createTx, [this.wallet, newPositionKeypair], 
+        { skipPreflight: false, commitment: 'confirmed' }
+      );
+      console.log('Create Position Transaction Signature:', signature);
+      
+      // Add new position to storage
+      this.positionStorage.addPosition(newPositionKeypair.publicKey, {
+        originalActiveBin: activeBinId,
+        minBinId,
+        maxBinId,
+        snapshotPositionValue: 0 // This will be updated by RiskManager
+      });
+      
+      console.log(`New position created: ${newPositionKeypair.publicKey.toString()}`);
+      
+    } catch (error) {
+      console.error(`Error creating single-sided position:`, error);
     }
   }
 
