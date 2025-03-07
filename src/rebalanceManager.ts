@@ -3,6 +3,7 @@ import { Config } from './models/Config';
 import { PositionStorage } from './utils/PositionStorage';
 import DLMM, { PositionInfo, StrategyType, StrategyParameters } from '@meteora-ag/dlmm';
 import { BN } from '@coral-xyz/anchor';
+import { FetchPrice } from './utils/fetch_price';
 
 export class RebalanceManager {
   private connection: Connection;
@@ -11,7 +12,6 @@ export class RebalanceManager {
   private positionStorage: PositionStorage;
   private lastRebalanceTime: Record<string, number> = {};
   private COOLDOWN_PERIOD = .25 * 60 * 60 * 1000; // 6 hours in milliseconds
-  private RANGE_WIDTH = 138; // Total range width (±69 bins from active bin)
   private dlmmInstances: Map<string, DLMM> = new Map();
 
   constructor(connection: Connection, wallet: Keypair, config: Config) {
@@ -81,6 +81,13 @@ export class RebalanceManager {
         const poolAddress = new PublicKey(poolAddressStr);
         console.log(`Checking pool: ${poolAddressStr} with ${poolPositions.length} positions`);
         
+        const now = Date.now();
+        const lastRebalance = this.lastRebalanceTime[poolAddressStr] || 0;
+        if (now - lastRebalance < this.COOLDOWN_PERIOD) {
+          console.log(`Skipping rebalance for pool ${poolAddressStr}, cooldown period not elapsed`);
+          continue;
+        }
+        
         // Get DLMM instance for this pool
         const dlmm = await this.getDLMMInstance(poolAddress);
         
@@ -130,6 +137,8 @@ export class RebalanceManager {
           console.log(`Closing all positions in pool ${poolAddressStr} due to range breach`);
           await this.closeAllPositionsInPool(poolAddress, poolPositions);
         }
+        
+        this.lastRebalanceTime[poolAddressStr] = now;
       }
       
     } catch (error) {
@@ -350,18 +359,125 @@ export class RebalanceManager {
       );
       console.log('Create Position Transaction Signature:', signature);
       
+      // Wait for the transaction to be confirmed and position to be created
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      // Get the position info to calculate its value
+      const positionsMap = await this.getUserPositions();
+      const newPosition = positionsMap.get(newPositionKeypair.publicKey.toString());
+      
+      let positionValue = 0;
+      if (newPosition) {
+        positionValue = await this.calculatePositionValue(newPosition);
+        console.log(`New position value: $${positionValue.toFixed(2)}`);
+      } else {
+        console.log('New position not found in user positions, using default value 0');
+      }
+      
       // Add new position to storage
       this.positionStorage.addPosition(newPositionKeypair.publicKey, {
         originalActiveBin: activeBinId,
         minBinId,
         maxBinId,
-        snapshotPositionValue: 0 // This will be updated by RiskManager
+        snapshotPositionValue: positionValue
       });
       
       console.log(`New position created: ${newPositionKeypair.publicKey.toString()}`);
       
     } catch (error) {
       console.error(`Error creating single-sided position:`, error);
+    }
+  }
+
+  /**
+   * Calculates the value of a position in USD
+   */
+  private async calculatePositionValue(position: PositionInfo): Promise<number> {
+    try {
+      // The position's publicKey refers to the pool
+      const poolAddress = position.publicKey;
+      
+      if (!poolAddress) {
+        console.error('Pool address not found in position data');
+        return 0;
+      }
+      
+      const dlmm = await this.getDLMMInstance(poolAddress);
+      
+      // Get the active bin to determine current price
+      const activeBinData = await dlmm.getActiveBin();
+      console.log(`Pool ${poolAddress.toString()} - Active bin: ${activeBinData.binId}, Price: ${activeBinData.price.toString()}`);
+      
+      // Use pricePerToken which should be correctly formatted
+      const pricePerToken = Number(activeBinData.pricePerToken);
+      console.log(`Price per token: $${pricePerToken}`);
+      
+      const solPrice = await this.getSOLPrice();
+
+      const lbPosition = position.lbPairPositionsData[0];
+      console.log(`Position data - X amount: ${lbPosition.positionData.totalXAmount.toString()}, Y amount: ${lbPosition.positionData.totalYAmount.toString()}`);
+      
+      const { tokenX, tokenY } = position;
+      console.log(`Token decimals - X: ${tokenX.decimal}, Y: ${tokenY.decimal}`);
+
+      // Convert amounts using token decimals
+      const xAmount = Number(lbPosition.positionData.totalXAmount) / 10 ** tokenX.decimal;
+      const yAmount = Number(lbPosition.positionData.totalYAmount) / 10 ** tokenY.decimal;
+      console.log(`Converted amounts - X: ${xAmount}, Y: ${yAmount}`);
+       
+      // Calculate token values
+      let totalValue = 0;
+      
+      // If Y is SOL
+      if (tokenY.publicKey.toString() === 'So11111111111111111111111111111111111111112') {
+        // X value in USD = X amount * price per token * SOL price in USD
+        const xValueInUsd = xAmount * pricePerToken * solPrice;
+        // Y value in USD = Y amount * SOL price in USD
+        const yValueInUsd = yAmount * solPrice;
+        
+        console.log(`Value calculation - X value: $${xValueInUsd.toFixed(4)}, Y value: $${yValueInUsd.toFixed(4)}`);
+        totalValue = xValueInUsd + yValueInUsd;
+      } 
+      // If X is SOL
+      else if (tokenX.publicKey.toString() === 'So11111111111111111111111111111111111111112') {
+        // X value in USD = X amount * SOL price in USD
+        const xValueInUsd = xAmount * solPrice;
+        // Y value in USD = Y amount / price per token * SOL price in USD
+        const yValueInUsd = yAmount / pricePerToken * solPrice;
+        
+        console.log(`Value calculation - X value: $${xValueInUsd.toFixed(4)}, Y value: $${yValueInUsd.toFixed(4)}`);
+        totalValue = xValueInUsd + yValueInUsd;
+      }
+      // For other token pairs, we would need external price data
+      else {
+        console.log('Non-SOL pair detected, using placeholder values');
+        // Placeholder calculation
+        totalValue = (xAmount + yAmount) * 1.0;
+      }
+      
+      console.log(`Total position value: $${totalValue.toFixed(4)}`);
+      
+      return totalValue;
+    } catch (error) {
+      console.error('Error calculating position value:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Gets the current SOL price
+   */
+  private async getSOLPrice(): Promise<number> {
+    try {
+      // Use the same method as RiskManager
+      const solPriceStr = await FetchPrice(process.env.SOL_Price_ID as string);
+      const solPriceNumber = parseFloat(solPriceStr);
+      console.log(`Fetched current Solana Price: ${solPriceStr}`);
+      return solPriceNumber;
+    } catch (error) {
+      console.error('Error fetching SOL price:', error);
+      // Fallback price if fetch fails
+      return 100.0;
     }
   }
 
