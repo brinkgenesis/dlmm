@@ -392,7 +392,7 @@ export class RebalanceManager {
   /**
    * Calculates the value of a position in USD
    */
-  private async calculatePositionValue(position: PositionInfo): Promise<number> {
+  public async calculatePositionValue(position: PositionInfo): Promise<number> {
     try {
       // The position's publicKey refers to the pool
       const poolAddress = position.publicKey;
