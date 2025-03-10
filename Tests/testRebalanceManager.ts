@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as dotenv from 'dotenv';
+import bs58 from 'bs58';
 
 // Load environment variables
 dotenv.config();
@@ -20,9 +21,15 @@ async function main() {
     // Load wallet from private key in .env
     let walletKeypair: Keypair;
     if (process.env.PRIVATE_KEY) {
-      const privateKeyArray = process.env.PRIVATE_KEY.split(',').map(Number);
-      walletKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray));
-      console.log(`✅ Wallet loaded from PRIVATE_KEY: ${walletKeypair.publicKey.toString()}`);
+      try {
+        // Try to decode the private key from base58
+        const privateKeyBytes = bs58.decode(process.env.PRIVATE_KEY);
+        walletKeypair = Keypair.fromSecretKey(privateKeyBytes);
+        console.log(`✅ Wallet loaded from PRIVATE_KEY: ${walletKeypair.publicKey.toString()}`);
+      } catch (error) {
+        console.error('Error decoding private key:', error);
+        throw new Error('Invalid private key format');
+      }
     } else {
       // Fallback to file-based wallet
       const walletPath = path.join(os.homedir(), '.config', 'solana', 'id.json');
@@ -38,7 +45,7 @@ async function main() {
     }
     
     // Setup connection using SOLANA_RPC from .env
-    const rpcUrl = process.env.SOLANA_RPC || 'https://withered-wild-snowflake.solana-mainnet.quiknode.pro/a1d7f0f489259367148eef8ae06627b19fdb9651';
+    const rpcUrl = process.env.SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
     console.log(`Connecting to Solana network at: ${rpcUrl}`);
     const connection = new Connection(rpcUrl, 'confirmed');
     
@@ -63,11 +70,21 @@ async function main() {
           console.log(`X Amount: ${posData.totalXAmount.toString()}`);
           console.log(`Y Amount: ${posData.totalYAmount.toString()}`);
           
-          // Calculate position value
-          const value = await rebalanceManager.calculatePositionValue(position);
-          console.log(`Estimated Value: $${value.toFixed(2)}`);
+          // Skip position value calculation for now
+          console.log(`Skipping value calculation to avoid recursion issue`);
         }
       }
+    }
+    
+    // Add this to your test script to debug
+    for (const [key, position] of positions.entries()) {
+      console.log(`Position ${key} details:`);
+      console.log(`- Public key: ${position.publicKey.toString()}`);
+      console.log(`- LB pair: ${position.lbPair?.toString() || 'unknown'}`);
+      
+      // Log the first few properties to see the structure
+      const props = Object.keys(position).slice(0, 5);
+      console.log(`- First properties: ${props.join(', ')}`);
     }
     
     // Run rebalance check
@@ -81,10 +98,10 @@ async function main() {
   }
 }
 
-// Make calculatePositionValue public for testing
-RebalanceManager.prototype.calculatePositionValue = function(position) {
-  return this['calculatePositionValue'](position);
-};
+// Don't modify the prototype - it's causing infinite recursion
+// RebalanceManager.prototype.calculatePositionValue = function(position) {
+//   return this['calculatePositionValue'](position);
+// };
 
 // Run the main function
 main().catch(err => {
