@@ -99,5 +99,34 @@ export class PositionStorage {
     delete this.positions[positionPubKey.toBase58()];
     this.save();
   }
+
+  /**
+   * Cleans up the positions storage by removing any positions that don't exist on-chain
+   * @param activePositionKeys - Array of position public keys currently active on-chain
+   */
+  public cleanupStalePositions(activePositionKeys: PublicKey[]): void {
+    console.log(`Cleaning up stale positions in storage...`);
+    const activeKeyStrings = activePositionKeys.map(key => key.toString());
+    
+    // Get all stored position keys
+    const storedKeys = Object.keys(this.positions);
+    
+    // Find keys that exist in storage but not on-chain
+    const staleKeys = storedKeys.filter(key => !activeKeyStrings.includes(key));
+    
+    // Remove stale positions
+    if (staleKeys.length > 0) {
+      console.log(`Found ${staleKeys.length} stale positions to remove`);
+      staleKeys.forEach(key => {
+        delete this.positions[key];
+        console.log(`Removed stale position: ${key}`);
+      });
+      
+      // Save the cleaned up positions
+      this.save();
+    } else {
+      console.log(`No stale positions found`);
+    }
+  }
 }
 
