@@ -70,8 +70,13 @@ async function main() {
           console.log(`X Amount: ${posData.totalXAmount.toString()}`);
           console.log(`Y Amount: ${posData.totalYAmount.toString()}`);
           
-          // Skip position value calculation for now
-          console.log(`Skipping value calculation to avoid recursion issue`);
+          // Calculate position value now that recursion issue is fixed
+          try {
+            const positionValue = await rebalanceManager.calculatePositionValue(position);
+            console.log(`Position Value: $${positionValue.toFixed(2)}`);
+          } catch (error) {
+            console.error(`Error calculating position value: ${error}`);
+          }
         }
       }
     }

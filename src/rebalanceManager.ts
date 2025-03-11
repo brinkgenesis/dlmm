@@ -138,7 +138,25 @@ export class RebalanceManager {
               }
             }
           } else {
-            console.log(`Position ${positionKey} not found in storage, skipping`);
+            console.log(`Position ${positionKey} not found in storage, adding it...`);
+            
+            // Create new position info
+            const newPositionInfo = {
+              originalActiveBin: activeBinId,
+              minBinId: position.lbPairPositionsData[0].positionData.lowerBinId,
+              maxBinId: position.lbPairPositionsData[0].positionData.upperBinId,
+              snapshotPositionValue: await this.calculatePositionValue(position)
+            };
+            
+            // Store the position
+            this.positionStorage.addPosition(
+              position.publicKey,
+              newPositionInfo
+            );
+            
+            // Now get the stored position info
+            const positionInfo = this.positionStorage.getPositionRange(position.publicKey);
+            console.log(`Added position to storage: Min: ${newPositionInfo.minBinId}, Max: ${newPositionInfo.maxBinId}`);
           }
         }
         
@@ -293,20 +311,29 @@ export class RebalanceManager {
                 }
                 
                 // Remove from storage
-                this.positionStorage.removePosition(lbPosition.publicKey);
+                if (typeof positionKey === 'string') {
+                  // Convert string to PublicKey
+                  this.positionStorage.removePosition(new PublicKey(positionKey));
+                } else {
+                  // Already a PublicKey
+                  this.positionStorage.removePosition(positionKey);
+                }
+                console.log(`Removed position ${positionKey.toString()} from position storage`);
                 
                 // Create new single-sided position
                 if (singleSidedX) {
                   // Use the X amount from the position we just closed
-                  // Ensure we have a clean number string for BN
-                  const xAmountStr = totalXAmount.toString().replace(/[^\d.]/g, '');
-                  console.log(`Using cleaned X amount string: ${xAmountStr}`);
-                  await this.createSingleSidePosition(dlmm, poolAddress, true, new BN(xAmountStr), new BN('0'));
+                  // Convert to integer by removing decimal part
+                  const xAmountParts = totalXAmount.toString().split('.');
+                  const xAmountInteger = xAmountParts[0]; // Just take the integer part
+                  console.log(`Using integer X amount: ${xAmountInteger}`);
+                  await this.createSingleSidePosition(dlmm, poolAddress, true, new BN(xAmountInteger), new BN('0'));
                 } else {
                   // Use the Y amount from the position we just closed
-                  const yAmountStr = totalYAmount.toString().replace(/[^\d.]/g, '');
-                  console.log(`Using cleaned Y amount string: ${yAmountStr}`);
-                  await this.createSingleSidePosition(dlmm, poolAddress, false, new BN('0'), new BN(yAmountStr));
+                  const yAmountParts = totalYAmount.toString().split('.');
+                  const yAmountInteger = yAmountParts[0]; // Just take the integer part
+                  console.log(`Using integer Y amount: ${yAmountInteger}`);
+                  await this.createSingleSidePosition(dlmm, poolAddress, false, new BN('0'), new BN(yAmountInteger));
                 }
               } else {
                 console.log(`No bins with liquidity found for position ${positionKey}`);
@@ -314,6 +341,10 @@ export class RebalanceManager {
             } catch (error) {
               console.error(`Error closing position ${positionKey}:`, error);
             }
+            
+            // After successfully closing the position
+            console.log(`${positionKey} successfully closed`);
+            
           } catch (error) {
             console.error(`Error processing position ${positionKey}:`, error);
           }
@@ -426,72 +457,70 @@ export class RebalanceManager {
   }
 
   /**
-   * Calculates the value of a position in USD
+   * Calculates the USD value of a position based on token amounts and current prices
    */
   public async calculatePositionValue(position: PositionInfo): Promise<number> {
     try {
-      // The position's publicKey refers to the pool
-      const poolAddress = position.publicKey;
+      // Check if we're already calculating this position (to prevent recursion)
+      const poolAddress = position.publicKey.toString();
       
-      if (!poolAddress) {
-        console.error('Pool address not found in position data');
+      // Get the active bin price information for the position's pool
+      const dlmm = await DLMM.create(this.connection, position.publicKey);
+      const activeBinData = await dlmm.getActiveBin();
+      console.log(`Pool ${poolAddress} - Active bin: ${activeBinData.binId}, Price: ${activeBinData.price.toString()}`);
+      
+      // Get price per token
+      const pricePerToken = Number(activeBinData.pricePerToken);
+      
+      // Get SOL price from Pyth
+      const solPriceStr = await FetchPrice(process.env.SOL_Price_ID as string);
+      const solPrice = parseFloat(solPriceStr);
+      console.log(`Current SOL Price: $${solPrice}`);
+
+      // Extract position amounts
+      const lbPosition = position.lbPairPositionsData[0];
+      if (!lbPosition || !lbPosition.positionData) {
+        console.error('Invalid position data structure');
         return 0;
       }
-      
-      const dlmm = await this.getDLMMInstance(poolAddress);
-      
-      // Get the active bin to determine current price
-      const activeBinData = await dlmm.getActiveBin();
-      console.log(`Pool ${poolAddress.toString()} - Active bin: ${activeBinData.binId}, Price: ${activeBinData.price.toString()}`);
-      
-      // Use pricePerToken which should be correctly formatted
-      const pricePerToken = Number(activeBinData.pricePerToken);
-      console.log(`Price per token: $${pricePerToken}`);
-      
-      const solPrice = await this.getSOLPrice();
-
-      const lbPosition = position.lbPairPositionsData[0];
-      console.log(`Position data - X amount: ${lbPosition.positionData.totalXAmount.toString()}, Y amount: ${lbPosition.positionData.totalYAmount.toString()}`);
-      
-      const { tokenX, tokenY } = position;
-      console.log(`Token decimals - X: ${tokenX.decimal}, Y: ${tokenY.decimal}`);
 
       // Convert amounts using token decimals
+      const { tokenX, tokenY } = position;
       const xAmount = Number(lbPosition.positionData.totalXAmount) / 10 ** tokenX.decimal;
       const yAmount = Number(lbPosition.positionData.totalYAmount) / 10 ** tokenY.decimal;
-      console.log(`Converted amounts - X: ${xAmount}, Y: ${yAmount}`);
+      console.log(`Position amounts - X: ${xAmount}, Y: ${yAmount}`);
        
-      // Calculate token values
+      // Calculate value based on which token is SOL
       let totalValue = 0;
+      const SOL_MINT = 'So11111111111111111111111111111111111111112';
       
       // If Y is SOL
-      if (tokenY.publicKey.toString() === 'So11111111111111111111111111111111111111112') {
+      if (tokenY.publicKey.toString() === SOL_MINT) {
         // X value in USD = X amount * price per token * SOL price in USD
         const xValueInUsd = xAmount * pricePerToken * solPrice;
         // Y value in USD = Y amount * SOL price in USD
         const yValueInUsd = yAmount * solPrice;
         
-        console.log(`Value calculation - X value: $${xValueInUsd.toFixed(4)}, Y value: $${yValueInUsd.toFixed(4)}`);
+        console.log(`Value calculation - X: $${xValueInUsd.toFixed(2)}, Y: $${yValueInUsd.toFixed(2)}`);
         totalValue = xValueInUsd + yValueInUsd;
       } 
       // If X is SOL
-      else if (tokenX.publicKey.toString() === 'So11111111111111111111111111111111111111112') {
+      else if (tokenX.publicKey.toString() === SOL_MINT) {
         // X value in USD = X amount * SOL price in USD
         const xValueInUsd = xAmount * solPrice;
         // Y value in USD = Y amount / price per token * SOL price in USD
         const yValueInUsd = yAmount / pricePerToken * solPrice;
         
-        console.log(`Value calculation - X value: $${xValueInUsd.toFixed(4)}, Y value: $${yValueInUsd.toFixed(4)}`);
+        console.log(`Value calculation - X: $${xValueInUsd.toFixed(2)}, Y: $${yValueInUsd.toFixed(2)}`);
         totalValue = xValueInUsd + yValueInUsd;
       }
       // For other token pairs, we would need external price data
       else {
-        console.log('Non-SOL pair detected, using placeholder values');
-        // Placeholder calculation
-        totalValue = (xAmount + yAmount) * 1.0;
+        console.log('Non-SOL pair detected. Cannot calculate value without price data.');
+        return 0;
       }
       
-      console.log(`Total position value: $${totalValue.toFixed(4)}`);
+      console.log(`Total position value: $${totalValue.toFixed(2)}`);
       
       return totalValue;
     } catch (error) {
@@ -499,36 +528,4 @@ export class RebalanceManager {
       return 0;
     }
   }
-
-  /**
-   * Gets the current SOL price
-   */
-  private async getSOLPrice(): Promise<number> {
-    try {
-      // Use the same method as RiskManager
-      const solPriceStr = await FetchPrice(process.env.SOL_Price_ID as string);
-      const solPriceNumber = parseFloat(solPriceStr);
-      console.log(`Fetched current Solana Price: ${solPriceStr}`);
-      return solPriceNumber;
-    } catch (error) {
-      console.error('Error fetching SOL price:', error);
-      // Fallback price if fetch fails
-      return 100.0;
-    }
-  }
-
-  /**
-   * Starts the rebalancing monitor
-   */
-  public startRebalanceMonitor(intervalMinutes: number = 30): void {
-    console.log(`Starting rebalance monitor with ${intervalMinutes} minute interval`);
-    
-    // Run immediately
-    this.checkAndRebalancePositions();
-    
-    // Then run on interval
-    setInterval(() => {
-      this.checkAndRebalancePositions();
-    }, intervalMinutes * 60 * 1000);
-  }
-} 
+}
