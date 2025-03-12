@@ -5,6 +5,7 @@ import { Config } from './models/Config';
 import { PositionStorage } from './utils/PositionStorage';
 import { RiskManager } from './riskManager';
 import { RebalanceManager } from './rebalanceManager';
+import { Dashboard, PositionData } from './dashboard';
 
 export class TradingApp {
   private passiveManager?: PassiveProcessManager;
@@ -228,10 +229,13 @@ export class TradingApp {
     console.log('Emergency endpoints configured');
   }
   
-  // Call this method during app initialization if using Express
+  /**
+   * Initialize API endpoints
+   * This method is called from server.ts
+   */
   public initializeApi(app: any): void {
     this.setupEmergencyEndpoints(app);
-    // Other API setup...
+ 
   }
   
   // Method to stop all monitoring and processes
@@ -254,5 +258,9 @@ export class TradingApp {
     this.passiveManager?.stopAll();
     
     console.log('TradingApp shutdown complete');
+  }
+
+  public getConfig(): Config {
+    return this.config;
   }
 } 
