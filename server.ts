@@ -115,7 +115,8 @@ app.post('/api/emergency/close-all-positions', async (req, res) => {
 
 // Start server
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
-  tradingApp.initialize();
+  await tradingApp.initialize();
+  console.log("TradingApp fully initialized and ready to handle requests");
 }); 

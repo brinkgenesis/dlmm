@@ -211,32 +211,9 @@ export class TradingApp {
     }
   }
   
-  // If you're using Express.js for your API, add this method:
-  private setupEmergencyEndpoints(app: any): void {
-    app.post('/api/emergency/close-all-positions', async (req: any, res: any) => {
-      try {
-        // Optionally add authentication check here
-        const result = await this.emergencyCloseAllPositions();
-        res.json(result);
-      } catch (error) {
-        res.status(500).json({ 
-          success: false, 
-          message: `Server error: ${error instanceof Error ? error.message : String(error)}` 
-        });
-      }
-    });
-    
-    console.log('Emergency endpoints configured');
-  }
+
   
-  /**
-   * Initialize API endpoints
-   * This method is called from server.ts
-   */
-  public initializeApi(app: any): void {
-    this.setupEmergencyEndpoints(app);
- 
-  }
+
   
   // Method to stop all monitoring and processes
   public shutdown() {
