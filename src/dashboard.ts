@@ -6,6 +6,7 @@ import DLMM from '@meteora-ag/dlmm';
 import { FetchPrice } from './utils/fetch_price';
 import bs58 from 'bs58';
 import * as dotenv from 'dotenv';
+import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 
 export interface PositionData {
   publicKey: string;
@@ -22,6 +23,14 @@ export interface PositionData {
   tokenXSymbol?: string;
   tokenYSymbol?: string;
   lastUpdated?: string;
+  pendingFees?: number;
+  emissionRateX?: number;
+  emissionRateY?: number;
+  currentPrice?: number;
+  tokenXAmount?: number;
+  tokenYAmount?: number;
+  tokenXValue?: number;
+  tokenYValue?: number;
 }
 
 interface StoredPositionData {
@@ -191,6 +200,12 @@ export class Dashboard {
             // Try to get token names/symbols correctly
             positionData.tokenXSymbol = position.tokenX.publicKey.toString();
             positionData.tokenYSymbol = position.tokenY.publicKey.toString();
+            
+            // In getAllPositions() after calculating totalXAmount and totalYAmount:
+            positionData.tokenXAmount = totalXAmount; // Example value: 5.25 BONK
+            positionData.tokenYAmount = totalYAmount; // Example value: 0.4 SOL
+            positionData.tokenXValue = xValue; // Example value: $3.15 USD
+            positionData.tokenYValue = yValue; // Example value: $8.25 USD
           } catch (error) {
             console.error(`Error processing on-chain data for position ${positionKey}:`, error);
           }
@@ -211,31 +226,45 @@ export class Dashboard {
    */
   public async getPositionsSummary() {
     const positions = await this.getAllPositions();
+    const walletInfo = await this.getWalletInfo();
     
-    // Calculate summary statistics
-    const totalPositions = positions.length;
-    const inRangePositions = positions.filter(p => p.status === 'IN_RANGE').length;
-    const outOfRangePositions = positions.filter(p => p.status === 'OUT_OF_RANGE').length;
-    const nearEdgePositions = positions.filter(p => p.status === 'NEAR_EDGE').length;
+    // Calculate totals and summaries
+    let totalPositions = positions.length;
+    let inRange = 0;
+    let outOfRange = 0;
+    let nearEdge = 0;
+    let totalValue = 0;
+    let totalChangeValue = 0;
+    let totalPendingFees = 0;
     
-    // Calculate total value
-    const totalValue = positions.reduce((sum, pos) => sum + (pos.currentValue || 0), 0);
-    
-    // Calculate performance
-    const totalChangeValue = positions.reduce((sum, pos) => {
-      if (pos.currentValue && pos.snapshotPositionValue) {
-        return sum + (pos.currentValue - pos.snapshotPositionValue);
-      }
-      return sum;
-    }, 0);
+    // Process positions to calculate statistics
+    for (const position of positions) {
+      // Status counting
+      if (position.status === 'IN_RANGE') inRange++;
+      else if (position.status === 'OUT_OF_RANGE') outOfRange++;
+      else if (position.status === 'NEAR_EDGE') nearEdge++;
+      
+      // Value calculations
+      totalValue += position.currentValue || 0;
+      totalChangeValue += position.percentageChange || 0;
+      totalPendingFees += position.pendingFees || 0;
+    }
     
     return {
+      // Position summary
       totalPositions,
-      inRange: inRangePositions,
-      outOfRange: outOfRangePositions,
-      nearEdge: nearEdgePositions,
+      inRange,
+      outOfRange,
+      nearEdge,
       totalValue,
       totalChangeValue,
+      totalPendingFees,
+      
+      // Wallet info
+      walletValue: walletInfo.totalValue,
+      totalCapital: totalValue + walletInfo.totalValue,
+      
+      // Position details
       positions
     };
   }
@@ -290,6 +319,103 @@ export class Dashboard {
       }
       
       console.log("-------------------------------------------");
+    }
+  }
+
+  private async getWalletInfo() {
+    // Get wallet address from environment variable
+    let walletAddress: PublicKey;
+    
+    if (process.env.PRIVATE_KEY) {
+      // Parse private key from environment
+      try {
+        // Try parsing as base58 string
+        const keypair = Keypair.fromSecretKey(
+          Buffer.from(bs58.decode(process.env.PRIVATE_KEY))
+        );
+        walletAddress = keypair.publicKey;
+      } catch (e) {
+        // Try parsing as array
+        const privateKeyArray = JSON.parse(process.env.PRIVATE_KEY);
+        const keypair = Keypair.fromSecretKey(
+          Uint8Array.from(privateKeyArray)
+        );
+        walletAddress = keypair.publicKey;
+      }
+    } else {
+      throw new Error("No wallet address available");
+    }
+    
+    // Get token accounts owned by the wallet
+    const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(
+      walletAddress,
+      { programId: TOKEN_PROGRAM_ID }
+    );
+    
+    let totalValue = 0;
+    const balances = [];
+    
+    // Process each token account
+    for (const account of tokenAccounts.value) {
+      const parsedInfo = account.account.data.parsed.info;
+      const mint = new PublicKey(parsedInfo.mint);
+      const balance = parsedInfo.tokenAmount.uiAmount;
+      
+      // Get token price (you'll need to implement this based on your price source)
+      const price = await this.getTokenPrice(mint);
+      
+      const value = balance * price;
+      totalValue += value;
+      
+      balances.push({
+        mint: mint.toString(),
+        balance,
+        price,
+        value
+      });
+    }
+    
+    // Get SOL balance
+    const solBalance = await this.connection.getBalance(walletAddress);
+    const solPrice = await this.getTokenPrice(new PublicKey('So11111111111111111111111111111111111111112'));
+    const solValue = solBalance * solPrice / 1_000_000_000; // Convert from lamports
+    
+    totalValue += solValue;
+    
+    return {
+      totalValue,
+      solBalance: solBalance / 1_000_000_000,
+      solValue,
+      tokens: balances
+    };
+  }
+  
+  private async getTokenPrice(mint: PublicKey) {
+    try {
+      // SOL is a special case
+      const SOL_MINT = 'So11111111111111111111111111111111111111112';
+      
+      if (mint.toString() === SOL_MINT && process.env.SOL_Price_ID) {
+        // Use FetchPrice utility for SOL
+        const solPriceStr = await FetchPrice(process.env.SOL_Price_ID);
+        return parseFloat(solPriceStr);
+      }
+      
+      // For other tokens, check if we have a price ID in env vars
+      const mintString = mint.toString();
+      const priceIDEnvVar = `${mintString}_Price_ID`;
+      
+      if (process.env[priceIDEnvVar]) {
+        const priceStr = await FetchPrice(process.env[priceIDEnvVar]);
+        return parseFloat(priceStr);
+      }
+      
+      // Fallback for tokens without price IDs
+      console.warn(`No price ID found for token: ${mintString}`);
+      return 1.0; // Default price
+    } catch (error) {
+      console.warn(`Error fetching price for ${mint.toString()}: ${error instanceof Error ? error.message : String(error)}`);
+      return 1.0; // Default fallback price
     }
   }
 }

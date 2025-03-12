@@ -11,7 +11,7 @@ export class RebalanceManager {
   private config: Config;
   private positionStorage: PositionStorage;
   private lastRebalanceTime: Record<string, number> = {};
-  private COOLDOWN_PERIOD = .25 * 60 * 60 * 1000; // 6 hours in milliseconds
+  private COOLDOWN_PERIOD = .25 * 60 * 60 * 1000; // 1.5 hours in milliseconds
   private dlmmInstances: Map<string, DLMM> = new Map();
 
   constructor(connection: Connection, wallet: Keypair, config: Config) {
