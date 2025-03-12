@@ -8,6 +8,8 @@ import bs58 from 'bs58';
 import * as dotenv from 'dotenv';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import axios from 'axios';
+import { BN } from '@coral-xyz/anchor';
+import { Decimal } from 'decimal.js';
 
 export interface PositionData {
   publicKey: string;
@@ -32,6 +34,16 @@ export interface PositionData {
   tokenYAmount?: number;
   tokenXValue?: number;
   tokenYValue?: number;
+  baseFeeRate?: number;
+  feeX?: string;
+  feeY?: string;
+  rewardOne?: string;
+  rewardTwo?: string;
+  totalClaimedFeeX?: string;
+  totalClaimedFeeY?: string;
+  pendingFeesUSD?: number;
+  feeXAmount?: number;
+  feeYAmount?: number;
 }
 
 interface StoredPositionData {
@@ -45,6 +57,7 @@ export class Dashboard {
   private config: Config;
   private connection: Connection;
   private positionsPath: string;
+  private tokenPrices: Record<string, number> = {};
 
   constructor(config: Config) {
     this.config = config;
@@ -207,6 +220,88 @@ export class Dashboard {
             positionData.tokenYAmount = totalYAmount; // Example value: 0.4 SOL
             positionData.tokenXValue = xValue; // Example value: $3.15 USD
             positionData.tokenYValue = yValue; // Example value: $8.25 USD
+            
+            // Add fee information
+            try {
+              // Get fee info
+              const feeInfo = await dlmm.getFeeInfo();
+              if (feeInfo) {
+                // The value is already a percentage (1.0 = 1%)
+                const baseFeePercentage = feeInfo.baseFeeRatePercentage.toNumber();
+                positionData.baseFeeRate = baseFeePercentage;
+              }
+              
+              // Get emission rates - keep these logs for now
+              const emissionRate = await dlmm.getEmissionRate();
+              console.log("Raw emission rate:", JSON.stringify(emissionRate));
+              
+              if (emissionRate) {
+                // Log the raw values
+                console.log("Reward One rate:", emissionRate.rewardOne?.toNumber());
+                console.log("Reward Two rate:", emissionRate.rewardTwo?.toNumber());
+                
+                // These values are already percentages
+                positionData.emissionRateX = emissionRate.rewardOne ? 
+                  emissionRate.rewardOne.toNumber() : 0;
+                positionData.emissionRateY = emissionRate.rewardTwo ? 
+                  emissionRate.rewardTwo.toNumber() : 0;
+              }
+              
+              // Get pending rewards/fees
+              if (lbPosition.positionData) {
+                // Get the raw BN values
+                const rawFeeX = lbPosition.positionData.feeX;
+                const rawFeeY = lbPosition.positionData.feeY;
+                
+                // Store raw values
+                positionData.feeX = rawFeeX ? rawFeeX.toString() : "0";
+                positionData.feeY = rawFeeY ? rawFeeY.toString() : "0";
+                
+                // Convert to actual token amounts
+                const tokenXDecimals = position.tokenX.decimal;
+                const tokenYDecimals = position.tokenY.decimal;
+                
+                // Convert raw fee amounts to actual token amounts
+                const feeXAmount = rawFeeX ? new Decimal(rawFeeX.toString()).div(new Decimal(10).pow(tokenXDecimals)) : new Decimal(0);
+                const feeYAmount = rawFeeY ? new Decimal(rawFeeY.toString()).div(new Decimal(10).pow(tokenYDecimals)) : new Decimal(0);
+                
+                // Make sure we have the token prices
+                try {
+                  // Ensure token prices are fetched
+                  if (!this.tokenPrices[position.tokenX.publicKey.toString()]) {
+                    // If not already fetched, get prices for this pair
+                    const mintAddresses = [
+                      position.tokenX.publicKey.toString(),
+                      position.tokenY.publicKey.toString()
+                    ];
+                    this.tokenPrices = {
+                      ...this.tokenPrices,
+                      ...(await this.getTokenPricesJupiter(mintAddresses))
+                    };
+                  }
+                  
+                  // Now use the tokenPrices map directly
+                  const tokenXPrice = this.tokenPrices[position.tokenX.publicKey.toString()] || 0;
+                  const tokenYPrice = this.tokenPrices[position.tokenY.publicKey.toString()] || 0;
+                  
+                  // Calculate USD values
+                  const feeXValue = feeXAmount.times(tokenXPrice);
+                  const feeYValue = feeYAmount.times(tokenYPrice);
+                  
+                  // Total fees in USD
+                  const totalPendingFeesUSD = feeXValue.plus(feeYValue);
+                  positionData.pendingFeesUSD = totalPendingFeesUSD.toNumber();
+                } catch (error) {
+                  console.error(`Error calculating USD values for fees:`, error);
+                }
+                
+                // Store the amounts for display
+                positionData.feeXAmount = feeXAmount.toNumber();
+                positionData.feeYAmount = feeYAmount.toNumber();
+              }
+            } catch (error) {
+              console.error(`Error getting fee info for position ${positionKey}:`, error);
+            }
           } catch (error) {
             console.error(`Error processing on-chain data for position ${positionKey}:`, error);
           }
@@ -315,13 +410,25 @@ export class Dashboard {
         console.log(`   Active Bin: ${position.currentActiveBin} (${position.percentageThroughRange?.toFixed(2)}% through range)`);
       }
       
-      if (position.currentValue !== undefined) {
-        console.log(`   Current Value: $${position.currentValue.toFixed(2)}`);
-      }
+      console.log(`   Current Value: $${position.currentValue?.toFixed(2) || 'Unknown'}`);
       
       if (position.percentageChange !== undefined) {
         const changePrefix = position.percentageChange >= 0 ? '+' : '';
         console.log(`   Change: ${changePrefix}${position.percentageChange.toFixed(2)}%`);
+      }
+      
+      if (position.feeXAmount !== undefined && position.feeYAmount !== undefined) {
+        console.log(`   Pending Fees: ${position.feeXAmount.toFixed(6)} tokens + ${position.feeYAmount.toFixed(6)} SOL ($${position.pendingFeesUSD?.toFixed(2) || '0.00'})`);
+      }
+      
+      if (position.baseFeeRate !== undefined) {
+        console.log(`   Base Fee Rate: ${position.baseFeeRate.toFixed(4)}%`);
+      }
+      
+      if (position.emissionRateX !== undefined || position.emissionRateY !== undefined) {
+        const rateX = position.emissionRateX !== undefined ? `${position.emissionRateX.toFixed(4)}%` : 'N/A';
+        const rateY = position.emissionRateY !== undefined ? `${position.emissionRateY.toFixed(4)}%` : 'N/A';
+        console.log(`   Emission Rates: ${rateX} / ${rateY}`);
       }
       
       console.log("-------------------------------------------");
@@ -358,32 +465,32 @@ export class Dashboard {
       
       // Use the v2 Jupiter price API endpoint
       const endpoint = `https://api.jup.ag/price/v2?ids=${mintIds}`;
-      console.log(`Fetching prices from: ${endpoint}`);
+      console.log(`Fetching prices from Jupiter...`);
       
       // Call Jupiter API
       const response = await axios.get(endpoint, {
         timeout: 10000, // 10 second timeout
       });
       
-      // Log the raw response for debugging
-      console.log("Jupiter API response:", JSON.stringify(response.data, null, 2));
-      
       // Correct parsing for the nested data structure
       const apiData = response.data.data as Record<string, { price: string } | null>;
       
       // Create a map of mint address to price
       const prices: Record<string, number> = {};
+      let priceCount = 0;
+      
       for (const mintAddress of mintAddresses) {
         const priceData = apiData[mintAddress];
         if (priceData && priceData.price) {
           prices[mintAddress] = parseFloat(priceData.price);
-          console.log(`Found price for ${mintAddress}: $${priceData.price}`);
+          priceCount++;
         } else {
           console.warn(`No price found for token: ${mintAddress}`);
           prices[mintAddress] = 0;
         }
       }
       
+      console.log(`Successfully fetched ${priceCount} token prices`);
       return prices;
     } catch (error) {
       console.error('Error fetching Jupiter prices:', error instanceof Error ? error.message : String(error));
