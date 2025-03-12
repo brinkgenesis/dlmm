@@ -27,8 +27,6 @@ export interface PositionData {
   tokenYSymbol?: string;
   lastUpdated?: string;
   pendingFees?: number;
-  emissionRateX?: number;
-  emissionRateY?: number;
   currentPrice?: number;
   tokenXAmount?: number;
   tokenYAmount?: number;
@@ -37,8 +35,6 @@ export interface PositionData {
   baseFeeRate?: number;
   feeX?: string;
   feeY?: string;
-  rewardOne?: string;
-  rewardTwo?: string;
   totalClaimedFeeX?: string;
   totalClaimedFeeY?: string;
   pendingFeesUSD?: number;
@@ -226,25 +222,9 @@ export class Dashboard {
               // Get fee info
               const feeInfo = await dlmm.getFeeInfo();
               if (feeInfo) {
-                // The value is already a percentage (1.0 = 1%)
+                // The value is already a percentage
                 const baseFeePercentage = feeInfo.baseFeeRatePercentage.toNumber();
                 positionData.baseFeeRate = baseFeePercentage;
-              }
-              
-              // Get emission rates - keep these logs for now
-              const emissionRate = await dlmm.getEmissionRate();
-              console.log("Raw emission rate:", JSON.stringify(emissionRate));
-              
-              if (emissionRate) {
-                // Log the raw values
-                console.log("Reward One rate:", emissionRate.rewardOne?.toNumber());
-                console.log("Reward Two rate:", emissionRate.rewardTwo?.toNumber());
-                
-                // These values are already percentages
-                positionData.emissionRateX = emissionRate.rewardOne ? 
-                  emissionRate.rewardOne.toNumber() : 0;
-                positionData.emissionRateY = emissionRate.rewardTwo ? 
-                  emissionRate.rewardTwo.toNumber() : 0;
               }
               
               // Get pending rewards/fees
@@ -265,7 +245,7 @@ export class Dashboard {
                 const feeXAmount = rawFeeX ? new Decimal(rawFeeX.toString()).div(new Decimal(10).pow(tokenXDecimals)) : new Decimal(0);
                 const feeYAmount = rawFeeY ? new Decimal(rawFeeY.toString()).div(new Decimal(10).pow(tokenYDecimals)) : new Decimal(0);
                 
-                // Make sure we have the token prices
+                // Fetch and use token prices
                 try {
                   // Ensure token prices are fetched
                   if (!this.tokenPrices[position.tokenX.publicKey.toString()]) {
@@ -423,12 +403,6 @@ export class Dashboard {
       
       if (position.baseFeeRate !== undefined) {
         console.log(`   Base Fee Rate: ${position.baseFeeRate.toFixed(4)}%`);
-      }
-      
-      if (position.emissionRateX !== undefined || position.emissionRateY !== undefined) {
-        const rateX = position.emissionRateX !== undefined ? `${position.emissionRateX.toFixed(4)}%` : 'N/A';
-        const rateY = position.emissionRateY !== undefined ? `${position.emissionRateY.toFixed(4)}%` : 'N/A';
-        console.log(`   Emission Rates: ${rateX} / ${rateY}`);
       }
       
       console.log("-------------------------------------------");
