@@ -7,6 +7,7 @@ import { FetchPrice } from './utils/fetch_price';
 import bs58 from 'bs58';
 import * as dotenv from 'dotenv';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import axios from 'axios';
 
 export interface PositionData {
   publicKey: string;
@@ -261,7 +262,7 @@ export class Dashboard {
       totalPendingFees,
       
       // Wallet info
-      walletValue: walletInfo.totalValue,
+      walletValue: walletInfo,
       totalCapital: totalValue + walletInfo.totalValue,
       
       // Position details
@@ -285,6 +286,11 @@ export class Dashboard {
     console.log(`Near Edge: ${summary.nearEdge}`);
     console.log(`Out of Range: ${summary.outOfRange}`);
     console.log(`Total Value: $${summary.totalValue.toFixed(2)}`);
+    
+    // Calculate and display Liquidity Allocated percentage
+    const liquidityAllocated = (summary.totalValue / summary.totalCapital) * 100;
+    console.log(`Liquidity Allocated: ${liquidityAllocated.toFixed(2)}%`);
+    
     console.log(`Total P&L: $${summary.totalChangeValue.toFixed(2)} (${summary.totalChangeValue > 0 ? '+' : ''}${(summary.totalChangeValue / (summary.totalValue - summary.totalChangeValue) * 100).toFixed(2)}%)`);
     
     console.log("\n-------------------------------------------");
@@ -320,10 +326,77 @@ export class Dashboard {
       
       console.log("-------------------------------------------");
     }
+    
+    // Add wallet section
+    console.log("\n-------------------------------------------");
+    console.log("                 WALLET                   ");
+    console.log("-------------------------------------------\n");
+    
+    // Display SOL balance
+    console.log(`SOL Balance: ${summary.walletValue.solBalance.toFixed(4)} SOL`);
+    
+    // Display token balances
+    if (summary.walletValue.tokens && summary.walletValue.tokens.length > 0) {
+      console.log("\nToken Balances:");
+      for (const token of summary.walletValue.tokens) {
+        const valueStr = token.value !== undefined ? 
+          `($${token.value.toFixed(2)})` : '';
+        console.log(`  ${token.mint.slice(0, 6)}... : ${token.balance} ${valueStr}`);
+      }
+    } else {
+      console.log("No token balances found");
+    }
+    
+    console.log(`\nTotal Wallet Value: $${summary.walletValue.totalValue.toFixed(2)}`);
+    console.log(`Total Capital: $${summary.totalCapital.toFixed(2)}`);
+  }
+
+  private async getTokenPricesJupiter(mintAddresses: string[]): Promise<Record<string, number>> {
+    try {
+      // Format mint addresses as a comma-separated list
+      const mintIds = mintAddresses.join(',');
+      
+      // Use the v2 Jupiter price API endpoint
+      const endpoint = `https://api.jup.ag/price/v2?ids=${mintIds}`;
+      console.log(`Fetching prices from: ${endpoint}`);
+      
+      // Call Jupiter API
+      const response = await axios.get(endpoint, {
+        timeout: 10000, // 10 second timeout
+      });
+      
+      // Log the raw response for debugging
+      console.log("Jupiter API response:", JSON.stringify(response.data, null, 2));
+      
+      // Correct parsing for the nested data structure
+      const apiData = response.data.data as Record<string, { price: string } | null>;
+      
+      // Create a map of mint address to price
+      const prices: Record<string, number> = {};
+      for (const mintAddress of mintAddresses) {
+        const priceData = apiData[mintAddress];
+        if (priceData && priceData.price) {
+          prices[mintAddress] = parseFloat(priceData.price);
+          console.log(`Found price for ${mintAddress}: $${priceData.price}`);
+        } else {
+          console.warn(`No price found for token: ${mintAddress}`);
+          prices[mintAddress] = 0;
+        }
+      }
+      
+      return prices;
+    } catch (error) {
+      console.error('Error fetching Jupiter prices:', error instanceof Error ? error.message : String(error));
+      // Return empty prices on error
+      return mintAddresses.reduce((prices, mint) => {
+        prices[mint] = 0;
+        return prices;
+      }, {} as Record<string, number>);
+    }
   }
 
   private async getWalletInfo() {
-    // Get wallet address from environment variable
+    // Get wallet address from environment variable (same as in getAllPositions)
     let walletAddress: PublicKey;
     
     if (process.env.PRIVATE_KEY) {
@@ -352,71 +425,52 @@ export class Dashboard {
       { programId: TOKEN_PROGRAM_ID }
     );
     
+    // Extract mint addresses
+    const mintAddresses = tokenAccounts.value.map(account => 
+      account.account.data.parsed.info.mint
+    );
+    
+    // Add SOL mint address
+    const SOL_MINT = 'So11111111111111111111111111111111111111112';
+    mintAddresses.push(SOL_MINT);
+    
+    // Get prices for all tokens at once
+    const prices = await this.getTokenPricesJupiter(mintAddresses);
+    
     let totalValue = 0;
     const balances = [];
     
     // Process each token account
     for (const account of tokenAccounts.value) {
       const parsedInfo = account.account.data.parsed.info;
-      const mint = new PublicKey(parsedInfo.mint);
+      const mint = parsedInfo.mint;
       const balance = parsedInfo.tokenAmount.uiAmount;
       
-      // Get token price (you'll need to implement this based on your price source)
-      const price = await this.getTokenPrice(mint);
-      
+      // Calculate value
+      const price = prices[mint] || 0;
       const value = balance * price;
       totalValue += value;
       
       balances.push({
-        mint: mint.toString(),
+        mint,
         balance,
-        price,
         value
       });
     }
     
     // Get SOL balance
-    const solBalance = await this.connection.getBalance(walletAddress);
-    const solPrice = await this.getTokenPrice(new PublicKey('So11111111111111111111111111111111111111112'));
-    const solValue = solBalance * solPrice / 1_000_000_000; // Convert from lamports
+    const solBalance = await this.connection.getBalance(walletAddress) / 1_000_000_000;
+    const solPrice = prices[SOL_MINT] || 0;
+    const solValue = solBalance * solPrice;
     
     totalValue += solValue;
     
     return {
       totalValue,
-      solBalance: solBalance / 1_000_000_000,
+      solBalance,
       solValue,
       tokens: balances
     };
-  }
-  
-  private async getTokenPrice(mint: PublicKey) {
-    try {
-      // SOL is a special case
-      const SOL_MINT = 'So11111111111111111111111111111111111111112';
-      
-      if (mint.toString() === SOL_MINT && process.env.SOL_Price_ID) {
-        // Use FetchPrice utility for SOL
-        const solPriceStr = await FetchPrice(process.env.SOL_Price_ID);
-        return parseFloat(solPriceStr);
-      }
-      
-      // For other tokens, check if we have a price ID in env vars
-      const mintString = mint.toString();
-      const priceIDEnvVar = `${mintString}_Price_ID`;
-      
-      if (process.env[priceIDEnvVar]) {
-        const priceStr = await FetchPrice(process.env[priceIDEnvVar]);
-        return parseFloat(priceStr);
-      }
-      
-      // Fallback for tokens without price IDs
-      console.warn(`No price ID found for token: ${mintString}`);
-      return 1.0; // Default price
-    } catch (error) {
-      console.warn(`Error fetching price for ${mint.toString()}: ${error instanceof Error ? error.message : String(error)}`);
-      return 1.0; // Default fallback price
-    }
   }
 }
 
