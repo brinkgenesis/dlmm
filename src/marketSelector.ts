@@ -1,13 +1,15 @@
 import fs from 'fs';
 import path from 'path';
 import inquirer from 'inquirer';
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection, PublicKey, Keypair } from '@solana/web3.js';
 import DLMM, {getTokensMintFromPoolAddress, getTokenDecimals} from '@meteora-ag/dlmm';
 import { Config } from './models/Config';
 import { createSingleSidePosition } from './utils/createSingleSidePosition';
 import { PositionStorage } from './utils/PositionStorage';
 import BN from 'bn.js';
 import axios from 'axios'; // For Jupiter API calls
+import bs58 from 'bs58';
+import * as os from 'os';
 
 interface MarketInfo {
   name: string;
@@ -19,12 +21,12 @@ interface MarketInfo {
 export class MarketSelector {
   private markets: MarketInfo[];
   private connection: Connection;
-  private wallet: any; // Using 'any' to match whatever wallet type your app is using
+  private wallet: Keypair;
   private positionStorage: PositionStorage;
   
   constructor(
     connection: Connection, 
-    wallet: any, 
+    wallet: Keypair, 
     positionStorage: PositionStorage
   ) {
     // Get market data from JSON file
@@ -195,4 +197,97 @@ export class MarketSelector {
       throw error;
     }
   }
+}
+
+// If this file is run directly, execute this code
+if (require.main === module) {
+  // Import dotenv for loading environment variables
+  const dotenv = require('dotenv');
+  dotenv.config();
+  
+  console.log("Starting Market Selector...");
+  
+  // Standalone execution function
+  async function runMarketSelector() {
+    try {
+      // Load config following your existing pattern
+      const config = await Config.load();
+      
+      // Create connection using config's RPC endpoint with fallback
+      const connection = new Connection(process.env.SOLANA_RPC || 'https://api.mainnet-beta.solana.com', 'confirmed');
+      
+      // Initialize position storage
+      const positionStorage = new PositionStorage(config);
+      
+      // Load wallet from private key in .env (same approach as testRebalanceManager)
+      let walletKeypair: Keypair;
+      if (process.env.PRIVATE_KEY) {
+        try {
+          // Try to decode the private key from base58
+          const privateKeyBytes = bs58.decode(process.env.PRIVATE_KEY);
+          walletKeypair = Keypair.fromSecretKey(privateKeyBytes);
+          console.log(`✅ Wallet loaded from PRIVATE_KEY: ${walletKeypair.publicKey.toString()}`);
+        } catch (error) {
+          console.error('Error decoding private key:', error);
+          throw new Error('Invalid private key format');
+        }
+      } else {
+        // Fallback to file-based wallet
+        const walletPath = path.join(os.homedir(), '.config', 'solana', 'id.json');
+        console.log(`Loading wallet from file: ${walletPath}`);
+        
+        if (!fs.existsSync(walletPath)) {
+          throw new Error(`Wallet file not found at ${walletPath}`);
+        }
+        
+        const walletKeyData = JSON.parse(fs.readFileSync(walletPath, 'utf-8'));
+        walletKeypair = Keypair.fromSecretKey(new Uint8Array(walletKeyData));
+        console.log(`✅ Wallet loaded from file: ${walletKeypair.publicKey.toString()}`);
+      }
+      
+      // Create the market selector with your connection, wallet and storage
+      const marketSelector = new MarketSelector(connection, walletKeypair, positionStorage);
+      
+      // Prompt user to select a market
+      console.log("Please select a market:");
+      const chosenMarket = await marketSelector.promptUserForMarketSelection();
+      console.log(`You selected: ${chosenMarket.name}`);
+      
+      // Initialize the selected market
+      console.log("Initializing market...");
+      const dlmm = await marketSelector.initializeSelectedMarket(chosenMarket);
+      
+      // Ask if user wants single-sided X or Y
+      const { singleSidedChoice } = await inquirer.prompt([
+        {
+          type: 'list',
+          name: 'singleSidedChoice',
+          message: 'Create single-sided position with:',
+          choices: [
+            { name: 'Token X', value: true },
+            { name: 'Token Y', value: false }
+          ]
+        }
+      ]);
+      
+      // Create the position
+      console.log(`Creating position with ${singleSidedChoice ? 'Token X' : 'Token Y'}...`);
+      await marketSelector.createPositionInSelectedMarket(
+        dlmm, 
+        chosenMarket, 
+        singleSidedChoice
+      );
+      
+      console.log('Position creation complete!');
+      
+    } catch (error) {
+      console.error('Error in market selection process:', error);
+    }
+  }
+  
+  // Run the standalone function
+  runMarketSelector().catch(err => {
+    console.error("Fatal error:", err);
+    process.exit(1);
+  });
 }
