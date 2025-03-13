@@ -3,6 +3,34 @@
     "originalActiveBin": -313,
     "minBinId": -354,
     "maxBinId": -286,
-    "snapshotPositionValue": 12.091818711109923
+    "snapshotPositionValue": 12.091818711109923,
+    "lastFeeTimestamp": 1741880730309,
+    "lastFeeX": "243854206",
+    "lastFeeY": "18286237",
+    "lastFeesUSD": 4.15644456723961,
+    "lastPositionValue": 9.95297135866993,
+    "dailyAPR": 1.8646109531388688,
+    "feeHistory": [
+      {
+        "timestamp": 1741826651703,
+        "feesUSD": 4.026297876497169,
+        "positionValue": 11.808122009585842
+      },
+      {
+        "timestamp": 1741844135932,
+        "feesUSD": 3.940293637944308,
+        "positionValue": 11.308575241673136
+      },
+      {
+        "timestamp": 1741846570396,
+        "feesUSD": 4.045134032177613,
+        "positionValue": 11.53631745262587
+      },
+      {
+        "timestamp": 1741880730309,
+        "feesUSD": 4.15644456723961,
+        "positionValue": 9.95297135866993
+      }
+    ]
   }
 }

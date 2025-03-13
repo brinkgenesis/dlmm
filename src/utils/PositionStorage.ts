@@ -10,8 +10,37 @@ interface PositionRange {
   snapshotPositionValue: number;
 }
 
+// Extend the PositionFeeData interface with fee history
+interface FeeSnapshot {
+  timestamp: number;
+  feesUSD: number;
+  positionValue: number;
+}
+
+// Extended interface to track fee data for APR calculations
+interface PositionFeeData extends PositionRange {
+  // Timestamp when fees were last recorded
+  lastFeeTimestamp?: number; // Unix timestamp in milliseconds
+  
+  // Last recorded fee amounts
+  lastFeeX?: string;
+  lastFeeY?: string;
+  
+  // Last recorded USD value of fees
+  lastFeesUSD?: number;
+  
+  // Position value at last fee recording
+  lastPositionValue?: number;
+  
+  // Calculated APR (if available)
+  dailyAPR?: number;
+  
+  // Add fee history for moving average
+  feeHistory?: FeeSnapshot[];
+}
+
 interface PositionsMapping {
-  [positionPubKey: string]: PositionRange;
+  [positionPubKey: string]: PositionFeeData;
 }
 
 /**
@@ -101,6 +130,122 @@ export class PositionStorage {
   }
 
   /**
+   * Updates fee data for APR calculations for a specific position
+   * @param positionPubKey - The public key of the position
+   * @param feeData - The fee data to update
+   */
+  public updatePositionFeeData(
+    positionPubKey: PublicKey, 
+    feeData: {
+      feeX: string;
+      feeY: string;
+      feesUSD: number;
+      positionValue: number;
+      timestamp: number;
+    }
+  ): void {
+    const positionKey = positionPubKey.toBase58();
+    let position = this.positions[positionKey];
+    
+    if (!position) {
+      console.log(`Position ${positionKey} not found in storage`);
+      return;
+    }
+    
+    // Create new snapshot
+    const newSnapshot: FeeSnapshot = {
+      timestamp: feeData.timestamp,
+      feesUSD: feeData.feesUSD,
+      positionValue: feeData.positionValue
+    };
+    
+    // Initialize or update fee history
+    if (!position.feeHistory) {
+      position.feeHistory = [newSnapshot];
+    } else {
+      // Add new snapshot, limit to last 24 snapshots (configurable)
+      position.feeHistory.push(newSnapshot);
+      if (position.feeHistory.length > 24) {
+        position.feeHistory.shift(); // Remove oldest
+      }
+    }
+    
+    // Only calculate APR if we have at least 2 snapshots
+    let dailyAPR: number | undefined = undefined;
+    
+    if (position.feeHistory.length >= 2) {
+      // Get the oldest and newest snapshots
+      const oldestSnapshot = position.feeHistory[0];
+      const newestSnapshot = position.feeHistory[position.feeHistory.length - 1];
+      
+      // Calculate time difference in minutes
+      const timeDiffMinutes = (newestSnapshot.timestamp - oldestSnapshot.timestamp) / (1000 * 60);
+      
+      if (timeDiffMinutes > 15) { // Minimum 15 minutes for calculation
+        // Calculate fee difference
+        const feeDiff = newestSnapshot.feesUSD - oldestSnapshot.feesUSD;
+        
+        if (feeDiff > 0) {
+          // Project to daily rate (1440 minutes in a day)
+          const projectedDailyFees = feeDiff * (1440 / timeDiffMinutes);
+          
+          // Use average position value
+          const avgPositionValue = position.feeHistory.reduce((sum, snapshot) => 
+            sum + snapshot.positionValue, 0) / position.feeHistory.length;
+          
+          // Calculate daily APR as percentage
+          dailyAPR = (projectedDailyFees / avgPositionValue) * 100;
+          
+          // Apply reasonable cap (e.g., 50% daily APR - still high but more realistic)
+          if (dailyAPR > 50) {
+            console.log(`Capping calculated APR from ${dailyAPR.toFixed(2)}% to 50%`);
+            dailyAPR = 50;
+          }
+          
+          console.log(`Calculated daily APR for ${positionKey} using ${position.feeHistory.length} snapshots over ${Math.round(timeDiffMinutes)} minutes: ${dailyAPR.toFixed(2)}%`);
+        }
+      } else {
+        console.log(`Not enough time elapsed for reliable APR calculation (${Math.round(timeDiffMinutes)} minutes)`);
+      }
+    }
+    
+    // Update position data
+    this.positions[positionKey] = {
+      ...position,
+      lastFeeTimestamp: feeData.timestamp,
+      lastFeeX: feeData.feeX,
+      lastFeeY: feeData.feeY,
+      lastFeesUSD: feeData.feesUSD,
+      lastPositionValue: feeData.positionValue,
+      ...(dailyAPR !== undefined ? { dailyAPR } : {}),
+      feeHistory: position.feeHistory // Save history
+    };
+    
+    this.save();
+  }
+
+  /**
+   * Gets APR data for a position
+   * @param positionPubKey - The public key of the position
+   * @returns APR data or undefined if not available
+   */
+  public getPositionAPRData(positionPubKey: PublicKey): {
+    dailyAPR?: number;
+    lastUpdated?: number;
+  } | undefined {
+    const position = this.positions[positionPubKey.toBase58()];
+    
+    if (!position) {
+      return undefined;
+    }
+    
+    return {
+      dailyAPR: position.dailyAPR,
+      lastUpdated: position.lastFeeTimestamp
+    };
+  }
+
+  /**
    * Cleans up the positions storage by removing any positions that don't exist on-chain
    * @param activePositionKeys - Array of position public keys currently active on-chain
    */
@@ -127,6 +272,37 @@ export class PositionStorage {
     } else {
       console.log(`No stale positions found`);
     }
+  }
+
+  // Add method to get APR history
+  public getPositionAPRHistory(positionPubKey: PublicKey): {
+    history: FeeSnapshot[];
+    aprCalculation: {
+      timeSpan: number; // minutes
+      feeChange: number;
+      dailyProjection: number;
+    };
+  } | undefined {
+    const position = this.positions[positionPubKey.toBase58()];
+    
+    if (!position || !position.feeHistory || position.feeHistory.length < 2) {
+      return undefined;
+    }
+    
+    const oldestSnapshot = position.feeHistory[0];
+    const newestSnapshot = position.feeHistory[position.feeHistory.length - 1];
+    const timeDiffMinutes = (newestSnapshot.timestamp - oldestSnapshot.timestamp) / (1000 * 60);
+    const feeChange = newestSnapshot.feesUSD - oldestSnapshot.feesUSD;
+    const dailyProjection = feeChange * (1440 / timeDiffMinutes);
+    
+    return {
+      history: position.feeHistory,
+      aprCalculation: {
+        timeSpan: timeDiffMinutes,
+        feeChange,
+        dailyProjection
+      }
+    };
   }
 }
 

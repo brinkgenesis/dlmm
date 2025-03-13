@@ -10,6 +10,7 @@ import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import axios from 'axios';
 import { BN } from '@coral-xyz/anchor';
 import { Decimal } from 'decimal.js';
+import { PositionStorage } from './utils/PositionStorage';
 
 export interface PositionData {
   publicKey: string;
@@ -40,6 +41,8 @@ export interface PositionData {
   pendingFeesUSD?: number;
   feeXAmount?: number;
   feeYAmount?: number;
+  dailyAPR?: number;
+  lastFeeUpdate?: number;
 }
 
 interface StoredPositionData {
@@ -54,11 +57,13 @@ export class Dashboard {
   private connection: Connection;
   private positionsPath: string;
   private tokenPrices: Record<string, number> = {};
+  private positionStorage: PositionStorage;
 
   constructor(config: Config) {
     this.config = config;
     this.connection = config.connection;
     this.positionsPath = path.join(process.cwd(), 'positions.json');
+    this.positionStorage = new PositionStorage(config);
   }
 
   /**
@@ -282,6 +287,71 @@ export class Dashboard {
             } catch (error) {
               console.error(`Error getting fee info for position ${positionKey}:`, error);
             }
+
+            // After we've calculated all the fee data for a position
+            if (lbPosition.positionData && positionData.pendingFeesUSD !== undefined) {
+              try {
+                // Use the position key, not pool address
+                console.log(`Processing position: ${positionKey}`);
+                
+                // Always use current time instead of lastUpdatedAt from Meteora
+                const currentTime = Date.now();
+                
+                // Get any existing data for time comparison
+                const existingData = this.positionStorage.getPositionAPRData(lbPosition.publicKey);
+                if (existingData && existingData.lastUpdated) {
+                  const lastTime = existingData.lastUpdated;
+                  const timeDiffMs = currentTime - lastTime;
+                  const minutesDiff = Math.floor(timeDiffMs / (1000 * 60));
+                  
+                  // Format time difference
+                  let timeDiffString = '';
+                  if (minutesDiff < 60) {
+                    timeDiffString = `${minutesDiff} minute${minutesDiff !== 1 ? 's' : ''}`;
+                  } else {
+                    const hoursDiff = Math.floor(minutesDiff / 60);
+                    const remainingMinutes = minutesDiff % 60;
+                    timeDiffString = `${hoursDiff} hour${hoursDiff !== 1 ? 's' : ''}`;
+                    if (remainingMinutes > 0) {
+                      timeDiffString += ` ${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''}`;
+                    }
+                  }
+                  
+                  console.log(`Time since last update: ${timeDiffString} (${new Date(lastTime).toLocaleString()} → ${new Date(currentTime).toLocaleString()})`);
+                } else {
+                  console.log(`First update for this position at: ${new Date(currentTime).toLocaleString()}`);
+                }
+                
+                // Update the position storage with fee data using position public key
+                this.positionStorage.updatePositionFeeData(
+                  lbPosition.publicKey,
+                  {
+                    feeX: positionData.feeX || "0",
+                    feeY: positionData.feeY || "0",
+                    feesUSD: positionData.pendingFeesUSD,
+                    positionValue: positionData.currentValue || 0,
+                    timestamp: currentTime
+                  }
+                );
+                
+                console.log(`Updated fee data for position ${positionKey}`);
+                console.log(`Current fees: $${positionData.pendingFeesUSD}`);
+
+                // Get the APR data
+                const aprData = this.positionStorage.getPositionAPRData(lbPosition.publicKey);
+                console.log(`APR data retrieved for ${positionKey}:`, aprData);
+
+                if (aprData) {
+                  positionData.dailyAPR = aprData.dailyAPR;
+                  positionData.lastFeeUpdate = aprData.lastUpdated;
+                  console.log(`Added APR data to position: dailyAPR=${positionData.dailyAPR}, lastUpdated=${positionData.lastFeeUpdate}`);
+                } else {
+                  console.log(`No APR data available yet - waiting for next run to calculate.`);
+                }
+              } catch (error) {
+                console.error(`Error calculating APR for position ${lbPosition.publicKey.toString()}:`, error);
+              }
+            }
           } catch (error) {
             console.error(`Error processing on-chain data for position ${positionKey}:`, error);
           }
@@ -403,6 +473,41 @@ export class Dashboard {
       
       if (position.baseFeeRate !== undefined) {
         console.log(`   Base Fee Rate: ${position.baseFeeRate.toFixed(4)}%`);
+      }
+      
+      if (position.dailyAPR !== undefined) {
+        console.log(`   Daily APR: ${position.dailyAPR.toFixed(2)}%`);
+        console.log(`   Projected Annual: ${(position.dailyAPR * 365).toFixed(2)}%`);
+        
+        // Get the APR history for additional context
+        const aprHistory = this.positionStorage.getPositionAPRHistory(new PublicKey(position.publicKey));
+        if (aprHistory) {
+          console.log(`   Calculation: $${aprHistory.aprCalculation.feeChange.toFixed(4)} fees over ${Math.round(aprHistory.aprCalculation.timeSpan)} minutes`);
+          console.log(`   Data points: ${aprHistory.history.length} snapshots`);
+        }
+        
+        if (position.lastFeeUpdate) {
+          const lastUpdateTime = new Date(position.lastFeeUpdate).toLocaleString();
+          const currentTime = Date.now();
+          const timeDiffMs = currentTime - position.lastFeeUpdate;
+          
+          // Calculate time difference in a human-readable format
+          const minutesDiff = Math.floor(timeDiffMs / (1000 * 60));
+          let timeDiffString = '';
+          
+          if (minutesDiff < 60) {
+            timeDiffString = `${minutesDiff} minute${minutesDiff !== 1 ? 's' : ''}`;
+          } else {
+            const hoursDiff = Math.floor(minutesDiff / 60);
+            const remainingMinutes = minutesDiff % 60;
+            timeDiffString = `${hoursDiff} hour${hoursDiff !== 1 ? 's' : ''}`;
+            if (remainingMinutes > 0) {
+              timeDiffString += ` ${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''}`;
+            }
+          }
+          
+          console.log(`   Last Fee Update: ${lastUpdateTime} (${timeDiffString} ago)`);
+        }
       }
       
       console.log("-------------------------------------------");
