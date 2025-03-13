@@ -159,21 +159,45 @@ export class PositionStorage {
       positionValue: feeData.positionValue
     };
     
-    // Initialize or update fee history
-    if (!position.feeHistory) {
-      position.feeHistory = [newSnapshot];
-    } else {
-      // Add new snapshot, limit to last 24 snapshots (configurable)
-      position.feeHistory.push(newSnapshot);
-      if (position.feeHistory.length > 24) {
-        position.feeHistory.shift(); // Remove oldest
+    // Check for fee claim event (significant fee decrease)
+    let feeClaimDetected = false;
+    if (position.lastFeesUSD && position.lastFeesUSD > 0) {
+      // If current fees are much lower than last recorded fees, 
+      // it likely means fees were claimed
+      if (feeData.feesUSD < position.lastFeesUSD * 0.8) { // 20% drop threshold
+        console.log(`Fee claim detected for position ${positionKey}: ${position.lastFeesUSD.toFixed(4)} → ${feeData.feesUSD.toFixed(4)}`);
+        feeClaimDetected = true;
       }
     }
     
-    // Only calculate APR if we have at least 2 snapshots
+    // Also check for very low fee amounts (another indicator of claiming or reset)
+    const minimumFeeThreshold = 0.05; // $0.05
+    if (feeData.feesUSD < minimumFeeThreshold) {
+      console.log(`Low fee amount detected (${feeData.feesUSD.toFixed(4)} < ${minimumFeeThreshold}) - possible fee claim`);
+      feeClaimDetected = true;
+    }
+    
+    // Reset history if fees were claimed
+    if (feeClaimDetected) {
+      console.log(`Resetting fee history for position ${positionKey} due to likely fee claim`);
+      position.feeHistory = [newSnapshot]; // Start fresh
+    } else {
+      // Normal update - initialize or update fee history
+      if (!position.feeHistory) {
+        position.feeHistory = [newSnapshot];
+      } else {
+        // Add new snapshot, limit to last 24 snapshots
+        position.feeHistory.push(newSnapshot);
+        if (position.feeHistory.length > 24) {
+          position.feeHistory.shift(); // Remove oldest
+        }
+      }
+    }
+    
+    // Only calculate APR if we have at least 2 snapshots and no fee claim
     let dailyAPR: number | undefined = undefined;
     
-    if (position.feeHistory.length >= 2) {
+    if (position.feeHistory.length >= 2 && !feeClaimDetected) {
       // Get the oldest and newest snapshots
       const oldestSnapshot = position.feeHistory[0];
       const newestSnapshot = position.feeHistory[position.feeHistory.length - 1];
@@ -185,6 +209,7 @@ export class PositionStorage {
         // Calculate fee difference
         const feeDiff = newestSnapshot.feesUSD - oldestSnapshot.feesUSD;
         
+        // Only calculate if fees increased (this is a safety check)
         if (feeDiff > 0) {
           // Project to daily rate (1440 minutes in a day)
           const projectedDailyFees = feeDiff * (1440 / timeDiffMinutes);
@@ -196,13 +221,15 @@ export class PositionStorage {
           // Calculate daily APR as percentage
           dailyAPR = (projectedDailyFees / avgPositionValue) * 100;
           
-          // Apply reasonable cap (e.g., 50% daily APR - still high but more realistic)
+          // Apply reasonable cap (e.g., 50% daily APR)
           if (dailyAPR > 50) {
             console.log(`Capping calculated APR from ${dailyAPR.toFixed(2)}% to 50%`);
             dailyAPR = 50;
           }
           
           console.log(`Calculated daily APR for ${positionKey} using ${position.feeHistory.length} snapshots over ${Math.round(timeDiffMinutes)} minutes: ${dailyAPR.toFixed(2)}%`);
+        } else {
+          console.log(`No fee increase detected for position ${positionKey}: ${feeDiff.toFixed(4)}`);
         }
       } else {
         console.log(`Not enough time elapsed for reliable APR calculation (${Math.round(timeDiffMinutes)} minutes)`);
