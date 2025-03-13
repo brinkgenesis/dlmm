@@ -865,3 +865,113 @@ private scheduleGlobalRewardClaims() {
 | Cross-Pool Exposure     | ∑(PositionValue) / Total  | >30% single pool|
 | Compound Efficiency     | (CompoundedAmount / Fees) | <0.85           |
 
+## 12. Fee Tracking & APR Calculation
+
+### 12.1 Overview
+This module introduces rolling fee snapshots for each open liquidity position, enabling more accurate APR calculations over time. Rather than relying on a single "last fees" data point, the system stores a history of snapshots, detecting fee claims automatically and resetting the count when necessary.
+
+**Key Features**:
+1. **Fee History**: Maintains multiple fee snapshots (`feeHistory`) per position.  
+2. **Rolling APR**: Compares the oldest and newest snapshots within a given time window to project daily APR.  
+3. **Claim Detection**: Monitors significant drops in fees (e.g., >20% or below $0.05) to detect fee-claim events and reset the fee history, preventing negative or erroneous APR readings.  
+4. **Moving Average**: Utilizes an average position value (across snapshots) to smooth out short-term volatility in the APR calculation.
+
+### 12.2 Implementation Details
+Below is a high-level flow of the Fee Tracking & APR Calculation system:
+
+```mermaid
+graph LR
+    A[User Trade/Fees Accumulate] --> B[Dashboard Refresh (new snapshot)]
+    B --> C[feeHistory updated in PositionStorage]
+    C --> D{Fee Claim<br/>Detection?}
+    D -- Yes --> E[Reset feeHistory]
+    D -- No --> F[Calculate Rolling APR<br/>with oldest/newest snapshots]
+    F --> G[Store dailyAPR in PositionFeeData]
+```
+
+#### Fee Snapshots
+Each snapshot includes:  
+- **timestamp** (milliseconds since epoch)  
+- **feesUSD** (USD value of accrued fees)  
+- **positionValue** (USD value of total liquidity)  
+
+```typescript
+interface FeeSnapshot {
+  timestamp: number;
+  feesUSD: number;
+  positionValue: number;
+}
+```
+
+#### Rolling APR Calculation
+1. **Time Difference**:  
+   \[
+     \text{timeDiffMinutes} = \frac{\text{newestTimestamp} - \text{oldestTimestamp}}{1000 \times 60}
+   \]  
+2. **Fee Difference**:  
+   \[
+     \text{feeDiff} = \text{newestFeesUSD} - \text{oldestFeesUSD}
+   \]
+3. **Projected Daily Fees**:  
+   \[
+     \text{projectedDailyFees} = \text{feeDiff} \times \left(\frac{1440}{\text{timeDiffMinutes}}\right)
+   \]
+4. **Average Position Value**:  
+   \[
+     \text{avgPositionValue} = \frac{\sum(\text{snapshot.positionValue})}{\text{snapshotCount}}
+   \]
+5. **Daily APR**:  
+   \[
+     \text{dailyAPR} = \frac{\text{projectedDailyFees}}{\text{avgPositionValue}} \times 100
+   \]
+   
+A safety cap (e.g., 50% daily) may be applied to prevent unrealistic short-term spikes.
+
+### 12.3 Claim Detection & History Reset
+When a snapshot shows **feesUSD** notably lower than the previous data point, we infer a claim event has occurred—resetting the fee history:
+
+- **20% Drop Threshold**: If `feeData.feesUSD < lastFeesUSD * 0.8`, consider it a claimed event.  
+- **Minimum Fee Threshold**: If `feesUSD < $0.05`, treat this as a claim event, too.
+
+Resetting the fee history ensures that subsequent fee differences remain accurate and do not falsely register as negative or inflated changes.
+
+### 12.4 Integration with Dashboard
+The **Dashboard** now:
+1. **Captures Current Time** each run, storing a new snapshot under `feeHistory`.  
+2. **Displays Rolling APR** (Daily + Projected Annual).  
+3. **Prints Time Since Last Snapshot** in human-readable format (e.g., "3 hours 10 minutes ago").  
+4. Logs any **fee claim events** detected.
+
+```typescript
+// Example snippet illustrating snapshot creation in dashboard
+this.positionStorage.updatePositionFeeData(
+  positionPublicKey,
+  {
+    feeX: positionData.feeX || "0",
+    feeY: positionData.feeY || "0",
+    feesUSD: positionData.pendingFeesUSD,
+    positionValue: positionData.currentValue || 0,
+    timestamp: Date.now()
+  }
+);
+```
+
+---
+
+## 13. Implementation Checklist (Updated)
+
+| Component                     | Status | Details                                                         | Code Reference          |
+|------------------------------|--------|-----------------------------------------------------------------|-------------------------|
+| Fee Snapshot System          | ✅     | Tracks multiple fee data points across time                     | PositionStorage.ts      |
+| Rolling APR Calculation      | ✅     | Uses oldest & newest snapshots for daily APR                    | PositionStorage.ts      |
+| Fee Claim Detection          | ✅     | Resets history upon suspected fee claim (≥20% drop or <\$0.05)  | PositionStorage.ts      |
+| Dashboard Time Diff & APR    | ✅     | Logs "X hours/minutes ago" & shows daily + annualized APR       | dashboard.ts            |
+| Min Time Gap Enforcement     | ⏳     | Optionally skip APR calc for sub-15 minute intervals (planned)  | N/A                     |
+
+### Strategic Impact
+- **Accurate Performance Visibility**: By averaging multiple snapshots, short-term volatility is accounted for, so daily APR readings reflect actual performance trends.  
+- **Automatic Claim Handling**: Sudden drops in fees are detected; fee history is reset to prevent negative or unrealistic APR.  
+- **Data-Driven Adjustments**: Risk managers and rebalancing logic can leverage the newly available dailyAPR to decide whether to move liquidity between pools or alter position sizes.  
+
+These enhancements seamlessly integrate with existing sections—particularly the *Monitoring & Reporting Framework* (Section 5) and the *Multi-Pool Management* architecture (Section 7)—ensuring more robust, data-driven liquidity strategies. 
+
