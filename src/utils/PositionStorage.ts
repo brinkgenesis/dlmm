@@ -43,6 +43,21 @@ interface PositionsMapping {
   [positionPubKey: string]: PositionFeeData;
 }
 
+// Add startingPositionValue to the interface
+export interface PositionData {
+  originalActiveBin: number;
+  minBinId: number;
+  maxBinId: number;
+  snapshotPositionValue: number;
+  startingPositionValue?: number; // Add this new field as optional for backward compatibility
+  feeHistory?: FeeSnapshot[];
+  lastFeeTimestamp?: number;
+  lastFeeX?: string;
+  lastFeeY?: string;
+  lastFeesUSD?: number;
+  lastPositionValue?: number;
+}
+
 /**
  * PositionStorage manages the storage of user positions and their associated bin ranges.
  */
@@ -98,8 +113,25 @@ export class PositionStorage {
    * @param positionPubKey - The public key of the position.
    * @param range - The bin range details.
    */
-  public addPosition(positionPubKey: PublicKey, range: PositionRange): void {
-    this.positions[positionPubKey.toBase58()] = range;
+  public addPosition(
+    positionKey: PublicKey, 
+    data: {
+      originalActiveBin: number;
+      minBinId: number;
+      maxBinId: number;
+      snapshotPositionValue: number;
+      startingPositionValue?: number; // New optional parameter
+    }
+  ): void {
+    const positionId = positionKey.toString();
+    
+    // Use snapshotPositionValue as the starting value if not explicitly provided
+    const positionData: PositionData = {
+      ...data,
+      startingPositionValue: data.startingPositionValue ?? data.snapshotPositionValue
+    };
+    
+    this.positions[positionId] = positionData;
     this.save();
   }
 

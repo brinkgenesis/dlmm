@@ -49,6 +49,7 @@ export interface PositionData {
   feeYAmount?: number;
   dailyAPR?: number;
   lastFeeUpdate?: number;
+  startingPositionValue?: number;
 }
 
 interface StoredPositionData {
@@ -56,6 +57,7 @@ interface StoredPositionData {
   minBinId: number;
   maxBinId: number;
   snapshotPositionValue: number;
+  startingPositionValue?: number;
 }
 
 export class Dashboard {
@@ -145,6 +147,7 @@ export class Dashboard {
             // Use stored data if available, otherwise use current
             originalActiveBin: storedPosition?.originalActiveBin || posData.lowerBinId,
             snapshotPositionValue: storedPosition?.snapshotPositionValue || 0,
+            startingPositionValue: storedPosition?.startingPositionValue || 0,
             lastUpdated: new Date().toISOString()
           };
           
@@ -193,9 +196,10 @@ export class Dashboard {
             positionData.currentValue = xValue + yValue;
             
             // Calculate percentage change
-            if (positionData.snapshotPositionValue > 0) {
-              positionData.percentageChange = ((positionData.currentValue - positionData.snapshotPositionValue) / positionData.snapshotPositionValue) * 100;
-            }
+            const startingValue = positionData.startingPositionValue || positionData.snapshotPositionValue || 0;
+            positionData.percentageChange = positionData.currentValue > 0 && startingValue > 0
+              ? ((positionData.currentValue - startingValue) / startingValue) * 100
+              : 0;
             
             // Get active bin
             const activeBinId = (await dlmm.getActiveBin()).binId;
