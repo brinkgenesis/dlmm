@@ -10,12 +10,19 @@ import BN from 'bn.js';
 import axios from 'axios'; // For Jupiter API calls
 import bs58 from 'bs58';
 import * as os from 'os';
+import { swapTokensWithRetry } from './utils/swapTokens';
+import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 
 interface MarketInfo {
   name: string;
   publicKey: string;
-  description?: string;
   defaultDollarAmount?: number;
+  binStep?: number;
+  baseFee?: string;
+  dailyAPR?: number;
+  tvl?: number; 
+  volumeTvlRatio?: number;
+  risk?: string;
 }
 
 export class MarketSelector {
@@ -42,7 +49,7 @@ export class MarketSelector {
 
   public async promptUserForMarketSelection(): Promise<MarketInfo> {
     const marketChoices = this.markets.map((market, index) => ({
-      name: `${index + 1}. ${market.name} — ${market.description || ''}`,
+      name: `${index + 1}. ${market.name} - ${market.risk || 'Unknown'} Risk | Fee: ${market.baseFee || 'N/A'} | Daily APR: ${market.dailyAPR ? market.dailyAPR + '%' : 'N/A'}`,
       value: market.publicKey
     }));
 
@@ -131,6 +138,59 @@ export class MarketSelector {
     }
   }
 
+  /**
+   * Get token balances from the wallet
+   */
+  private async getTokenBalances(): Promise<Record<string, { balance: number, value: number }>> {
+    try {
+      // Get token accounts owned by the wallet
+      const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(
+        this.wallet.publicKey,
+        { programId: TOKEN_PROGRAM_ID }
+      );
+      
+      // Extract mint addresses
+      const mintAddresses = tokenAccounts.value.map(account => 
+        account.account.data.parsed.info.mint
+      );
+      
+      // Add SOL mint address
+      const SOL_MINT = 'So11111111111111111111111111111111111111112';
+      mintAddresses.push(SOL_MINT);
+      
+      // Get prices for all tokens at once
+      const prices = await this.getTokenPricesJupiter(mintAddresses);
+      
+      // Create a map of token mint to balance and value
+      const balances: Record<string, { balance: number, value: number }> = {};
+      
+      // Process each token account
+      for (const account of tokenAccounts.value) {
+        const parsedInfo = account.account.data.parsed.info;
+        const mint = parsedInfo.mint;
+        const balance = parsedInfo.tokenAmount.uiAmount;
+        
+        // Calculate value
+        const price = prices[mint] || 0;
+        const value = balance * price;
+        
+        balances[mint] = { balance, value };
+      }
+      
+      // Get SOL balance
+      const solBalance = await this.connection.getBalance(this.wallet.publicKey) / 1_000_000_000;
+      const solPrice = prices[SOL_MINT] || 0;
+      const solValue = solBalance * solPrice;
+      
+      balances[SOL_MINT] = { balance: solBalance, value: solValue };
+      
+      return balances;
+    } catch (error) {
+      console.error('Error getting token balances:', error);
+      return {};
+    }
+  }
+
   public async createPositionInSelectedMarket(
     dlmm: DLMM,
     chosenMarket: MarketInfo,
@@ -141,7 +201,7 @@ export class MarketSelector {
       const dollarAmount = 
         chosenMarket.defaultDollarAmount !== undefined
           ? chosenMarket.defaultDollarAmount
-          : 100; // fallback
+          : 1; // fallback
       
       console.log(`Creating position in ${chosenMarket.name} with $${dollarAmount}`);
       
@@ -153,6 +213,63 @@ export class MarketSelector {
       
       // Get the token mint address we need to price (X or Y depending on singleSidedX flag)
       const targetTokenMint = singleSidedX ? tokenXMint : tokenYMint;
+      const otherTokenMint = singleSidedX ? tokenYMint : tokenXMint;
+      
+      // Get our wallet token balances
+      const balances = await this.getTokenBalances();
+      
+      // Check if we have the target token and enough value
+      const targetTokenBalance = balances[targetTokenMint.toString()];
+      const targetTokenValue = targetTokenBalance?.value || 0;
+      
+      console.log(`Current ${singleSidedX ? 'X' : 'Y'} token balance: $${targetTokenValue.toFixed(2)}`);
+      
+      // Check if we need to swap tokens
+      if (targetTokenValue < dollarAmount) {
+        const shortfall = dollarAmount - targetTokenValue;
+        console.log(`Insufficient ${singleSidedX ? 'X' : 'Y'} token balance. Need $${shortfall.toFixed(2)} more.`);
+        
+        // Check if we have enough of the other token
+        const otherTokenBalance = balances[otherTokenMint.toString()];
+        const otherTokenValue = otherTokenBalance?.value || 0;
+        
+        if (otherTokenValue < shortfall) {
+          throw new Error(`Insufficient funds. Need $${shortfall.toFixed(2)} more but only have $${otherTokenValue.toFixed(2)} in other token.`);
+        }
+        
+        // Get token prices
+        const prices = await this.getTokenPricesJupiter([targetTokenMint.toString(), otherTokenMint.toString()]);
+        const targetTokenPrice = prices[targetTokenMint.toString()] || 0;
+        const otherTokenPrice = prices[otherTokenMint.toString()] || 0;
+        
+        if (targetTokenPrice === 0 || otherTokenPrice === 0) {
+          throw new Error('Failed to get token prices for swap');
+        }
+        
+        // Calculate how much of the other token we need to swap
+        const otherTokenAmount = shortfall / otherTokenPrice;
+        
+        // Get token decimals
+        const otherTokenDecimals = await getTokenDecimals(this.connection, otherTokenMint);
+        
+        // Convert to lamports
+        const swapAmount = new BN(Math.floor(otherTokenAmount * Math.pow(10, otherTokenDecimals)).toString());
+        
+        console.log(`Swapping ${otherTokenAmount.toFixed(6)} ${singleSidedX ? 'Y' : 'X'} tokens to get ${(shortfall / targetTokenPrice).toFixed(6)} ${singleSidedX ? 'X' : 'Y'} tokens`);
+        
+        // Perform the swap - note the swapYtoX parameter is !singleSidedX because:
+        // If singleSidedX is true, we need token X, so we're swapping Y to X (swapYtoX = true)
+        // If singleSidedX is false, we need token Y, so we're swapping X to Y (swapYtoX = false)
+        await swapTokensWithRetry(
+          this.connection,
+          dlmm,
+          swapAmount,
+          !singleSidedX, // This is correct - if we need X, we swap Y->X
+          this.wallet
+        );
+        
+        console.log('Swap completed, continuing to position creation');
+      }
       
       // Get the token price using your Jupiter utility
       const prices = await this.getTokenPricesJupiter([targetTokenMint.toString()]);

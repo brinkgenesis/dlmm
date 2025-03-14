@@ -1,16 +1,54 @@
 {
   "markets": [
     {
-      "name": "JLP/SOL",
-      "publicKey": "4r9iRArA8zHX8q7j87TaExGmQtJm1Q4QTurTDR3tr3Qa",
-      "description": "A curated pool for trading Token A and Token B",
-      "defaultDollarAmount": 10
+      "name": "JLP-SOL",
+      "publicKey": "J2Gsg3xTDjM8UZjKdEqzBeDwitHb2Ux6TSBX5RzsE42r",
+      "binStep":20,
+      "baseFee":"0.2%",
+      "dailyAPR":1,
+      "tvl":0,
+      "volumeTvlRatio":1,
+      "risk":"Low"
     },
     {
-      "name": "SSE/SOL",
-      "publicKey": "Fn7Zq7oHwwV9QfE3jzTJfu9VDxZFmHPo8tQZ6w1f9EaK",
-      "description": "Another curated pool for token pairs X/Y",
-      "defaultDollarAmount": 10
+        "name": "Pwease-SOL",
+        "publicKey": "HZErmEhFdPtEv8miyRNJ6YYDCJVTUDQ8vb6b9gYV1pAY",
+        "binStep":100,
+        "baseFee":"1%",
+        "dailyAPR":1,
+        "tvl":0,
+        "volumeTvlRatio":1,
+        "risk":"High"
+    },
+    {
+        "name": "ALCH-SOL",
+        "publicKey": "G1G9e8Xmo9yNZxu6uygj5gAS5r4WzHNPNjEKL3Y1CeHe",
+        "binStep":100,
+        "baseFee":".8%",
+        "dailyAPR":1,
+        "tvl":0,
+        "volumeTvlRatio":1,
+        "risk":"Medium"
+    },
+    {
+        "name": "GRIFFAIN-SOL",
+        "publicKey": "B8t6HyaVQddYZnFihN27w9vSTfY9AdKpV6oCMbZMobjA",
+        "binStep":20,
+        "baseFee":".2%",
+        "dailyAPR":1,
+        "tvl":0,
+        "volumeTvlRatio":1,
+        "risk":"Medium"
+    },
+    {
+        "name": "BUZZ-SOL",
+        "publicKey": "Cqi9Uu5g4gbtpoNVyT6zjirWSLYr48NKsHPusBf2NL7U",
+        "binStep":100,
+        "baseFee":"1%",
+        "dailyAPR":1,
+        "tvl":0,
+        "volumeTvlRatio":1,
+        "risk":"Medium"
     }
   ]
 }
