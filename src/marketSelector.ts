@@ -12,6 +12,7 @@ import bs58 from 'bs58';
 import * as os from 'os';
 import { swapTokensWithRetry } from './utils/swapTokens';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { getTokenPricesJupiter, getTokenPriceJupiter } from './utils/fetchPriceJupiter';
 
 interface MarketInfo {
   name: string;
@@ -94,50 +95,6 @@ export class MarketSelector {
     }
   }
 
-  private async getTokenPricesJupiter(mintAddresses: string[]): Promise<Record<string, number>> {
-    try {
-      // Format mint addresses as a comma-separated list
-      const mintIds = mintAddresses.join(',');
-      
-      // Use the v2 Jupiter price API endpoint
-      const endpoint = `https://api.jup.ag/price/v2?ids=${mintIds}`;
-      console.log(`Fetching prices from Jupiter...`);
-      
-      // Call Jupiter API
-      const response = await axios.get(endpoint, {
-        timeout: 10000, // 10 second timeout
-      });
-      
-      // Correct parsing for the nested data structure
-      const apiData = response.data.data as Record<string, { price: string } | null>;
-      
-      // Create a map of mint address to price
-      const prices: Record<string, number> = {};
-      let priceCount = 0;
-      
-      for (const mintAddress of mintAddresses) {
-        const priceData = apiData[mintAddress];
-        if (priceData && priceData.price) {
-          prices[mintAddress] = parseFloat(priceData.price);
-          priceCount++;
-        } else {
-          console.warn(`No price found for token: ${mintAddress}`);
-          prices[mintAddress] = 0;
-        }
-      }
-      
-      console.log(`Successfully fetched ${priceCount} token prices`);
-      return prices;
-    } catch (error) {
-      console.error('Error fetching Jupiter prices:', error instanceof Error ? error.message : String(error));
-      // Return empty prices on error
-      return mintAddresses.reduce((prices, mint) => {
-        prices[mint] = 0;
-        return prices;
-      }, {} as Record<string, number>);
-    }
-  }
-
   /**
    * Get token balances from the wallet
    */
@@ -159,7 +116,7 @@ export class MarketSelector {
       mintAddresses.push(SOL_MINT);
       
       // Get prices for all tokens at once
-      const prices = await this.getTokenPricesJupiter(mintAddresses);
+      const prices = await getTokenPricesJupiter(mintAddresses);
       
       // Create a map of token mint to balance and value
       const balances: Record<string, { balance: number, value: number }> = {};
@@ -213,7 +170,7 @@ export class MarketSelector {
       const balances = await this.getTokenBalances();
       
       // Get the token price using Jupiter
-      const prices = await this.getTokenPricesJupiter([targetTokenMint.toString(), otherTokenMint.toString()]);
+      const prices = await getTokenPricesJupiter([targetTokenMint.toString(), otherTokenMint.toString()]);
       const targetTokenPrice = prices[targetTokenMint.toString()] || 0;
       const otherTokenPrice = prices[otherTokenMint.toString()] || 0;
       
@@ -277,7 +234,7 @@ export class MarketSelector {
       }
       
       // Refresh prices again to be safe
-      const updatedPrices = await this.getTokenPricesJupiter([targetTokenMint.toString()]);
+      const updatedPrices = await getTokenPricesJupiter([targetTokenMint.toString()]);
       const tokenPrice = updatedPrices[targetTokenMint.toString()] || targetTokenPrice;
       
       console.log(`Token price: $${tokenPrice}`);

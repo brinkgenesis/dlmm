@@ -11,6 +11,12 @@ import axios from 'axios';
 import { BN } from '@coral-xyz/anchor';
 import { Decimal } from 'decimal.js';
 import { PositionStorage } from './utils/PositionStorage';
+import { 
+  getTokenPricesJupiter, 
+  getTokenPriceJupiter, 
+  tokenAmountToUsd, 
+  usdToTokenAmount 
+} from './utils/fetchPriceJupiter';
 
 export interface PositionData {
   publicKey: string;
@@ -261,7 +267,7 @@ export class Dashboard {
                     ];
                     this.tokenPrices = {
                       ...this.tokenPrices,
-                      ...(await this.getTokenPricesJupiter(mintAddresses))
+                      ...(await getTokenPricesJupiter(mintAddresses))
                     };
                   }
                   
@@ -621,7 +627,7 @@ export class Dashboard {
     mintAddresses.push(SOL_MINT);
     
     // Get prices for all tokens at once
-    const prices = await this.getTokenPricesJupiter(mintAddresses);
+    const prices = await getTokenPricesJupiter(mintAddresses);
     
     let totalValue = 0;
     const balances = [];
