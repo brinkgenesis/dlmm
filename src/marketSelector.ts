@@ -205,49 +205,45 @@ export class MarketSelector {
       
       console.log(`Creating position in ${chosenMarket.name} with $${dollarAmount}`);
       
-      // Get the token mints from the pool address using the utility function
-      const { tokenXMint, tokenYMint } = await getTokensMintFromPoolAddress(
-        this.connection, 
-        chosenMarket.publicKey
-      );
+      // Get token mints from the pool
+      const targetTokenMint = singleSidedX ? dlmm.tokenX.publicKey : dlmm.tokenY.publicKey;
+      const otherTokenMint = singleSidedX ? dlmm.tokenY.publicKey : dlmm.tokenX.publicKey;
       
-      // Get the token mint address we need to price (X or Y depending on singleSidedX flag)
-      const targetTokenMint = singleSidedX ? tokenXMint : tokenYMint;
-      const otherTokenMint = singleSidedX ? tokenYMint : tokenXMint;
-      
-      // Get our wallet token balances
+      // First check balances
       const balances = await this.getTokenBalances();
       
-      // Check if we have the target token and enough value
-      const targetTokenBalance = balances[targetTokenMint.toString()];
-      const targetTokenValue = targetTokenBalance?.value || 0;
+      // Get the token price using Jupiter
+      const prices = await this.getTokenPricesJupiter([targetTokenMint.toString(), otherTokenMint.toString()]);
+      const targetTokenPrice = prices[targetTokenMint.toString()] || 0;
+      const otherTokenPrice = prices[otherTokenMint.toString()] || 0;
       
-      console.log(`Current ${singleSidedX ? 'X' : 'Y'} token balance: $${targetTokenValue.toFixed(2)}`);
+      if (targetTokenPrice === 0) {
+        throw new Error(`Failed to get price for token: ${targetTokenMint.toString()}`);
+      }
       
-      // Check if we need to swap tokens
-      if (targetTokenValue < dollarAmount) {
-        const shortfall = dollarAmount - targetTokenValue;
+      // Calculate current value of target token
+      const currentBalance = balances[targetTokenMint.toString()]?.balance || 0;
+      const currentValue = currentBalance * targetTokenPrice;
+      
+      console.log(`Current ${singleSidedX ? 'X' : 'Y'} token balance: $${currentValue.toFixed(2)}`);
+      
+      // Check if we have enough of the target token
+      if (currentValue < dollarAmount) {
+        const shortfall = dollarAmount - currentValue;
         console.log(`Insufficient ${singleSidedX ? 'X' : 'Y'} token balance. Need $${shortfall.toFixed(2)} more.`);
         
         // Check if we have enough of the other token
-        const otherTokenBalance = balances[otherTokenMint.toString()];
-        const otherTokenValue = otherTokenBalance?.value || 0;
+        const otherTokenBalance = balances[otherTokenMint.toString()]?.balance || 0;
+        const otherTokenValue = otherTokenBalance * otherTokenPrice;
         
         if (otherTokenValue < shortfall) {
-          throw new Error(`Insufficient funds. Need $${shortfall.toFixed(2)} more but only have $${otherTokenValue.toFixed(2)} in other token.`);
-        }
-        
-        // Get token prices
-        const prices = await this.getTokenPricesJupiter([targetTokenMint.toString(), otherTokenMint.toString()]);
-        const targetTokenPrice = prices[targetTokenMint.toString()] || 0;
-        const otherTokenPrice = prices[otherTokenMint.toString()] || 0;
-        
-        if (targetTokenPrice === 0 || otherTokenPrice === 0) {
-          throw new Error('Failed to get token prices for swap');
+          throw new Error(`Insufficient funds in both tokens. Need $${shortfall.toFixed(2)} more.`);
         }
         
         // Calculate how much of the other token we need to swap
-        const otherTokenAmount = shortfall / otherTokenPrice;
+        // Add 1% for transaction fees and slippage
+        const swapBuffer = 1.01;
+        const otherTokenAmount = (shortfall * swapBuffer) / otherTokenPrice;
         
         // Get token decimals
         const otherTokenDecimals = await getTokenDecimals(this.connection, otherTokenMint);
@@ -257,37 +253,41 @@ export class MarketSelector {
         
         console.log(`Swapping ${otherTokenAmount.toFixed(6)} ${singleSidedX ? 'Y' : 'X'} tokens to get ${(shortfall / targetTokenPrice).toFixed(6)} ${singleSidedX ? 'X' : 'Y'} tokens`);
         
-        // Perform the swap - note the swapYtoX parameter is !singleSidedX because:
-        // If singleSidedX is true, we need token X, so we're swapping Y to X (swapYtoX = true)
-        // If singleSidedX is false, we need token Y, so we're swapping X to Y (swapYtoX = false)
+        // Perform the swap - direction parameter is swapYtoX
+        // If singleSidedX is true, we need X, so swapYtoX should be true (Y->X)
+        // If singleSidedX is false, we need Y, so swapYtoX should be false (X->Y)
         await swapTokensWithRetry(
           this.connection,
           dlmm,
           swapAmount,
-          !singleSidedX, // This is correct - if we need X, we swap Y->X
+          singleSidedX, // This matches our need: true = Y->X, false = X->Y
           this.wallet
         );
         
         console.log('Swap completed, continuing to position creation');
+        
+        // Wait a moment for the transaction to be fully processed
+        console.log('Waiting for transaction to be confirmed...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Refresh token balances after swap
+        const updatedBalances = await this.getTokenBalances();
+        const newBalance = updatedBalances[targetTokenMint.toString()]?.balance || 0;
+        console.log(`Updated ${singleSidedX ? 'X' : 'Y'} token balance: ${newBalance.toFixed(6)} ($ ${(newBalance * targetTokenPrice).toFixed(2)})`);
       }
       
-      // Get the token price using your Jupiter utility
-      const prices = await this.getTokenPricesJupiter([targetTokenMint.toString()]);
-      const tokenPrice = prices[targetTokenMint.toString()] || 0;
-      
-      if (tokenPrice === 0) {
-        throw new Error(`Failed to get price for token: ${targetTokenMint.toString()}`);
-      }
+      // Refresh prices again to be safe
+      const updatedPrices = await this.getTokenPricesJupiter([targetTokenMint.toString()]);
+      const tokenPrice = updatedPrices[targetTokenMint.toString()] || targetTokenPrice;
       
       console.log(`Token price: $${tokenPrice}`);
       
-      // Get token decimals using the getTokenDecimals function from Meteora SDK
+      // Get token decimals 
       const tokenDecimals = await getTokenDecimals(this.connection, targetTokenMint);
       console.log(`Token decimals: ${tokenDecimals}`);
       
-      // Calculate token amount from dollar amount
-      // tokenAmount = dollarAmount / tokenPrice
-      const tokenAmount = dollarAmount / tokenPrice;
+      // Calculate token amount from dollar amount (with 1% buffer to account for slippage)
+      const tokenAmount = (dollarAmount * 0.99) / tokenPrice;
       
       // Convert to lamports (multiply by 10^decimals)
       const tokenAmountLamports = Math.floor(tokenAmount * Math.pow(10, tokenDecimals));
@@ -298,7 +298,6 @@ export class MarketSelector {
       console.log(`Converting $${dollarAmount} to ${tokenAmount} tokens (${tokenAmountLamports} lamports)`);
       
       // Call your existing createSingleSidePosition function
-      // Pass the token amount in BN format
       await createSingleSidePosition(
         this.connection,
         dlmm,
@@ -308,7 +307,7 @@ export class MarketSelector {
         this.positionStorage
       );
       
-      console.log(`Position creation initiated in ${chosenMarket.name}`);
+      console.log(`Position creation completed in ${chosenMarket.name}`);
     } catch (error) {
       console.error(`Error creating position in ${chosenMarket.name}:`, error);
       throw error;

@@ -93,14 +93,18 @@ export async function createSingleSidePosition(
       ? pool.tokenX.publicKey.toBase58() 
       : pool.tokenY.publicKey.toBase58();
 
-    const priceFeedID = await getFeedIdForMint(tokenMint, connection);
-    if (!priceFeedID) {
-      console.warn(`⚠️ No price feed for ${tokenMint}, using $1 default`);
-      return { 
-        positionPubKey, 
-        minBinId, 
-        maxBinId 
-      }; // Return position data without dollar value
+    try {
+      const priceFeedID = await getFeedIdForMint(tokenMint, connection);
+      if (!priceFeedID) {
+        console.warn(`⚠️ No price feed for ${tokenMint}, using $1 default`);
+        return { 
+          positionPubKey, 
+          minBinId, 
+          maxBinId 
+        }; // Return position data without dollar value
+      }
+    } catch (error) {
+      console.log(`Pyth feed not available for ${tokenMint}, using Jupiter prices instead`);
     }
 
      // Determine which token is SOL
@@ -137,7 +141,6 @@ export async function createSingleSidePosition(
     throw error;
   }
 }
-
 async function getSOLPrice(): Promise<number> {
     const solPriceStr = await FetchPrice(process.env.SOL_Price_ID as string);
     const solPriceNumber = parseFloat(solPriceStr);
