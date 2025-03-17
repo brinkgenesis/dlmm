@@ -113,6 +113,69 @@ app.post('/api/emergency/close-all-positions', async (req, res) => {
   }
 });
 
+// Market Selection Endpoints
+app.get('/api/markets', async (req, res) => {
+  try {
+    const marketSelector = tradingApp.getMarketSelector();
+    const markets = marketSelector.markets.map(market => ({
+      id: market.publicKey, // publicKey is the pool address
+      name: market.name,
+      risk: market.risk || 'Unknown',
+      fee: market.baseFee || 'N/A',
+      dailyAPR: market.dailyAPR || 'N/A'
+    }));
+    
+    res.json({ success: true, markets });
+  } catch (error) {
+    console.error('Error fetching markets:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch markets' });
+  }
+});
+
+app.post('/api/markets/select', async (req, res) => {
+  try {
+    const { poolAddress, singleSidedX } = req.body;
+    if (!poolAddress) {
+      return res.status(400).json({ success: false, error: 'Pool address is required' });
+    }
+    
+    const marketSelector = tradingApp.getMarketSelector();
+    
+    // Find the market with the given pool address
+    const chosenMarket = marketSelector.markets.find(
+      market => market.publicKey === poolAddress
+    );
+    
+    if (!chosenMarket) {
+      return res.status(404).json({ 
+        success: false, 
+        error: `Market with pool address ${poolAddress} not found`
+      });
+    }
+    
+    // Use the existing methods in sequence
+    const dlmm = await marketSelector.initializeSelectedMarket(chosenMarket);
+    await marketSelector.createPositionInSelectedMarket(
+      dlmm, 
+      chosenMarket, 
+      singleSidedX === undefined ? true : singleSidedX
+    );
+    
+    res.json({ 
+      success: true, 
+      message: `Position created successfully in ${chosenMarket.name}`,
+      market: chosenMarket.name,
+      side: singleSidedX ? 'Token X' : 'Token Y'
+    });
+  } catch (error) {
+    console.error('Error creating position in market:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // Start server
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, async () => {

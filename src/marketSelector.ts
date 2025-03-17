@@ -27,7 +27,7 @@ interface MarketInfo {
 }
 
 export class MarketSelector {
-  private markets: MarketInfo[];
+  public markets: MarketInfo[];
   private connection: Connection;
   private wallet: Keypair;
   private positionStorage: PositionStorage;

@@ -6,6 +6,7 @@ import { PositionStorage } from './utils/PositionStorage';
 import { RiskManager } from './riskManager';
 import { RebalanceManager } from './rebalanceManager';
 import { Dashboard, PositionData } from './dashboard';
+import { MarketSelector } from './marketSelector';
 
 export class TradingApp {
   private passiveManager?: PassiveProcessManager;
@@ -16,6 +17,7 @@ export class TradingApp {
   private rebalanceManager!: RebalanceManager;
   private riskMonitoringInterval?: NodeJS.Timeout;
   private rebalanceInterval?: NodeJS.Timeout;
+  private marketSelector: MarketSelector;
 
   constructor(
     public connection: Connection,
@@ -35,6 +37,13 @@ export class TradingApp {
     // Initialize rebalance manager
     this.rebalanceManager = new RebalanceManager(this.connection, this.wallet, this.config);
     console.log('Rebalance manager initialized');
+
+    // Initialize market selector
+    this.marketSelector = new MarketSelector(
+      this.connection,
+      this.wallet,
+      this.positionStorage
+    );
   }
 
   public async initialize() {
@@ -48,6 +57,8 @@ export class TradingApp {
     
     // Start rebalance monitoring
     this.startRebalanceMonitoring();
+    
+    console.log(`Markets loaded: ${this.marketSelector.markets.length} available markets`);
     
     console.log('✅ DLMM Manager fully initialized with all managers running');
   }
@@ -239,5 +250,10 @@ export class TradingApp {
 
   public getConfig(): Config {
     return this.config;
+  }
+
+  // Add getter method for marketSelector
+  public getMarketSelector(): MarketSelector {
+    return this.marketSelector;
   }
 } 
