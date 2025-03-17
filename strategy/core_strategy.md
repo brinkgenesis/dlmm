@@ -40,6 +40,7 @@
   - Accurate position valuation using `getActiveBin().pricePerToken`
   - SOL price oracle integration for USD conversions
   - Proper token decimal normalization
+  - Initial position value recording for accurate PnL calculation
 
 - **Drawdown Detection**:
   - Continuous position value monitoring
@@ -149,7 +150,7 @@
 
 ---
 
-## 6. Order Management Architecture (New)
+## 6. Order Management Architecture
 ### 6.1 System Overview
 ```mermaid
 graph TD
@@ -217,6 +218,7 @@ interface AugmentedPosition {
     upperBinId: number;
     lowerBinId: number;
   };
+  startingPositionValue?: number; // Added for PnL tracking
 }
 ```
 
@@ -238,8 +240,10 @@ activePools.forEach(poolAddress => {
 |------------------------|--------|------------------------------------------|------------------------|
 | Order Manager          | ✅      | Limit/TP/SL order execution             | orderManager.ts        |
 | Multi-Pool Processes   | ✅      | Automated position discovery            | processManager.ts      |
-| Global Fee Tracking    | ⏳      | Cross-pool fee analytics                 | feeTracker.ts          |
-| Batch Order Execution  | ❌      | Atomic multi-order transactions          | orderBatching.ts      |
+| Global Fee Tracking    | ✅      | Cross-pool fee analytics                 | feeTracker.ts          |
+| Batch Order Execution  | ✅      | Atomic multi-order transactions          | orderBatching.ts      |
+| PnL Tracking           | ✅      | Position value at creation tracking      | positionStorage.ts    |
+| Market Selection API   | ✅      | Access available markets via REST API    | marketSelector.ts     |
 
 ---
 
@@ -250,6 +254,7 @@ activePools.forEach(poolAddress => {
 | Active Orders           | OrderManager map size     | >50             |
 | Order Execution Latency | Price check → TX confirm  | >120s           |
 | Cross-Pool Exposure     | ∑(PositionValue) / Total  | >30% single pool|
+| Position PnL            | (Current - Initial)/Initial | <-15% in 30m   |
 
 ### 9.2 Alert Hierarchy Update
 **Level 2 (Enhanced)**:
@@ -260,18 +265,71 @@ activePools.forEach(poolAddress => {
 ---
 
 ## 10. Strategic Roadmap
-### Phase 5: Order Optimization (Q3 2024)
+### Phase 5: Market Selection System (Completed)
 | Priority | Task                          | Owner            | Status  |
 |----------|-------------------------------|------------------|---------|
-| P0       | Order Batching Engine         | Trading Team     | ❌      |
-| P1       | Slippage Protection           | Risk Team        | ⏳      |
-| P2       | Cross-Pool Balancing          | Research Team    | ❌      |
+| P0       | Market Discovery API          | Core Team        | ✅      |
+| P1       | Risk Rating Implementation    | Risk Team        | ✅      |
+| P2       | Market Integration            | Integration Team | ✅      |
 
-### Phase 6: Advanced Analytics (Q4 2024)
+### Phase 6: Position Performance Tracking (Completed)
+| Priority | Task                           | Owner            | Status  |
+|----------|--------------------------------|------------------|---------|
+| P0       | Initial Position Value Storage | Core Team        | ✅      |
+| P1       | PnL Calculations               | Analysis Team    | ✅      |
+| P2       | Dashboard Integration          | Frontend Team    | ✅      |
+
+### Phase 7: Advanced Analytics (Q4 2024)
 | Priority | Task                          | Owner            | Status  |
 |----------|-------------------------------|------------------|---------|
 | P1       | Predictive Order Flow         | Data Science     | ❌      |
 | P2       | ML-based Price Forecasting    | AI Team          | ❌      |
+
+## 11. New Features
+### 11.1 Market Selection System
+- **Market Discovery**:
+  - API endpoint to fetch available markets
+  - Risk ratings for each market
+  - Fee and APR data for market comparison
+  - Integration with position creation workflow
+
+- **Position Creation**:
+  - Single API call to create positions in selected markets
+  - Support for single-sided X or Y positions
+  - Automatic token swaps when needed
+  - Integration with existing risk management systems
+
+### 11.2 Jupiter Price Integration
+- **Price Feed System**:
+  - Real-time token price data from Jupiter API
+  - Multi-token batch price requests for efficiency
+  - USD value calculation for all positions
+  - Fallback mechanisms for API outages
+
+### 11.3 Position Performance Tracking
+- **Initial Value Recording**:
+  - Store position USD value at creation time
+  - Track position value changes over time
+  - Calculate accurate P&L metrics
+  - Support for performance monitoring
+
+### 11.4 REST API Interface
+- **/api/markets**:
+  - Fetch available markets with risk ratings
+  - GET endpoint with filtering options
+  - Security rate limiting to prevent abuse
+
+- **/api/markets/select**:
+  - Create position in selected market
+  - POST endpoint with market and side parameters
+  - Returns position creation confirmation
+  
+- **/api/positions**:
+  - Fetch all positions with performance data
+  - Position values include initial and current USD values
+  - Performance metrics for all positions
+
+---
 
 ## Completed Features
 1. **Token Metrics Collection** (token_data.ts)
@@ -300,6 +358,29 @@ activePools.forEach(poolAddress => {
      - Error isolation between pools
    - **Status**: ✅ Implemented (v1.2)
 
+4. **Market Selection System** (marketSelector.ts)
+   - **Key Functionality**:
+     - Browse available liquidity pools through API
+     - View risk ratings and APRs for markets
+     - Create positions with single API call
+     - Auto-handle token swaps when needed
+   - **Integration**:
+     - REST API endpoints (/api/markets, /api/markets/select)
+     - Frontend integration for market discovery
+     - Risk parameter integration
+   - **Status**: ✅ Implemented (v1.3)
+
+5. **Position Performance Tracking** (positionStorage.ts)
+   - **Key Functionality**:
+     - Records position value at creation time
+     - Tracks position value changes over time
+     - Calculates accurate P&L metrics
+   - **Integration**:
+     - Dashboard position summary integration
+     - Historical performance tracking
+     - Risk threshold monitoring
+   - **Status**: ✅ Implemented (v1.3)
+
 **Implementation Snippet**:
 ```typescript:src/autoCompounder.ts
 public async autoCompound() {
@@ -321,33 +402,6 @@ public async autoCompound() {
   }
 }
 ```
-## 11. Position Rebalancing System
-### 11.1 Rebalancing Triggers
-- **Range Breach Detection**:
-  - Active bin moves outside position range (min/max binId)
-  - Price moves >70% through allocated range
-  - Bin utilization imbalance >80% in single direction
-
-- **Rebalancing Actions**:
-  - Close existing position (removeLiquidity + closePosition)
-  - Calculate new optimal range around current active bin
-  - Re-create position with balanced liquidity distribution
-  - Update position storage with new range parameters
-
-### 11.2 Implementation Architecture
-
-
-### 11.3 Rebalancing Parameters
-| Parameter | Value | Description |
-|-----------|-------|-------------|
-| Range Breach Threshold | 0% | Trigger when activeBin ≤ minBinId or ≥ maxBinId |
-| Range Proximity Warning | 70% | Alert when price approaches range edge |
-| Cooldown Period | 6h | Minimum time between rebalances |
-| New Range Width | 138 bins | ±69 bins from current active bin |
-| Strategy Type | Based on original | Maintain same strategy type |
-
-**Implementation Status**: ⏳ In Progress
-
 
 ## Pending Requirements
 1. **Additional Data Sources**:
@@ -363,7 +417,7 @@ public async autoCompound() {
 3. **Error Resilience**:
    - Rate limiting for DexScreener API
    - Fallback data sources
-   - ❌ Basic error handling only
+   - ✅ Basic implementation complete
 
 **Legend**:  
 ✅ Implemented | ⏳ In Progress | ❌ Not Started | 🛠 Partial Implementation
@@ -380,598 +434,4 @@ public async autoCompound() {
 1. [Meteora Dynamic Fees Documentation](https://docs.meteora.ag/dlmm/dynamic-fees)
 2. [DLMM Strategy Playbook](https://thewise.trade/dlmm-guide-multidays)
 3. [Volatility Accumulator Model](https://docs.meteora.ag/dlmm/strategies-and-use-cases)
-
-
-**Implementation**:
-```typescript:src/utils/DLMMClient.ts
-// Link to existing position creation logic
-startLine: 363
-endLine: 477
-
-// Suggested enhancement for dynamic sizing:
-public async createPosition(userDollarAmount: number, confidenceScore: number) {
-  const baseSize = userDollarAmount * (0.2 + 0.8 * confidenceScore);
-  const {totalXAmount, totalYAmount} = calculateTokenAmounts(
-    baseSize,
-    activeBinPrice,
-    SolPrice,
-    9,
-    9
-  );
-  // Existing position creation logic
-}
-```
-To do: Create a new file called confidence_score.ts and a function called calculateConfidenceScore that returns confidenceScore. This enables dynamic sizing for positions. Before the confidenceScore calculations are properly done, just default confidenceScore to 1 so that the createPosition function will run normally. 
-
-### 1.2 Basic Risk Parameters
-**Circuit Breaker Implementation**:
-```typescript:src/utils/DLMMClient.ts
-// Add pre-transaction checks
-startLine: 363
-endLine: 477
-
-async managePosition() {
-  // Add before transaction execution
-  if (await this.riskManager.checkDrawdown(15)) {
-    this.adjustPositionSize(0.5);
-  }
-  if (await this.riskManager.checkVolumeDrop()) {
-    await this.closeAllPositions();
-  }
-}
-```
-To do: Inside riskManager.ts add the checkDrawdown, adjustPositionSize, checkVolumeDrop and closeAllPositions functions.
-
-
-## 2. Data Layer Integration (Weeks 5-7)
-### 2.1 Oracle Price Integration
-```typescript:src/utils/DLMMClient.ts
-// Enhance price fetching
-startLine: 794
-endLine: 899
-
-// Modify existing price fetch:
-const SolPrice = await this.oracle.getPrice('SOL');
-const volatilityScore = await this.volatilityOracle.getScore(poolAddress);
-```
-
-### 2.2 Historical Backtesting
-```typescript
-// New backtest module
-export class Backtester {
-  async run(scenario: BacktestScenario) {
-    const historicalData = await this.loadData(scenario.pool);
-    const results = await this.simulateTrades(
-      historicalData,
-      scenario.strategy
-    );
-    return this.generateReport(results);
-  }
-}
-```
-
-## 3. Optimization Phase (Weeks 8-9)
-### 3.1 Fee Modeling Engine
-```typescript:src/utils/DLMMClient.ts
-// Enhance transaction sending
-startLine: 316
-endLine: 352
-
-private async sendTransactionWithBackoff(transaction: Transaction, signers: Signer[]) {
-  const fee = this.feeModel.calculateOptimalFee();
-  transaction.add(ComputeBudgetProgram.setComputeUnitPrice({ 
-    microLamports: fee 
-  }));
-  // Existing retry logic
-}
-```
-
-### 3.2 MEV Protection
-```typescript
-// New MEV protection class
-export class MEVShield {
-  constructor(private connection: Connection) {}
-
-  async bundleTransactions(txs: Transaction[]) {
-    const blockhash = await this.connection.getLatestBlockhash();
-    return txs.map(tx => {
-      tx.recentBlockhash = blockhash.blockhash;
-      return tx;
-    });
-  }
-}
-```
-
-## 4. Expansion Phase (Weeks 10-12)
-### 4.1 Cross-Pool Arbitrage
-```typescript
-// New arbitrage detector
-export class ArbitrageEngine {
-  async findOpportunities() {
-    const pools = await this.poolScanner.findMatchingPools();
-    return this.arbitrageMath.calculateSpread(pools);
-  }
-}
-```
-
-# Updated Core Strategy Additions
-
-## Dynamic Fee Adaptation Implementation
-
-# Updated Core Strategy Additions
-
-## Dynamic Fee Adaptation Implementation
-
-// Volatility-based fee adjustment
-export class FeeModel {
-calculateOptimalFee(volatilityScore: number): number {
-const baseFee = 30000; // 0.3%
-return baseFee + (volatilityScore 5000);
-}
-}
-
-## Social Sentiment Integration
-```typescript
-// Sentiment-aware position sizing
-export class SentimentAdapter {
-  async adjustPosition(sentimentScore: number, position: Position) {
-    if (sentimentScore < 0.4) {
-      return position.reduce(0.75);
-    }
-    return position;
-  }
-}
-```
-
-## Liquidity Cycling Implementation
-```typescript
-// Market phase detection
-export class MarketPhaseDetector {
-  async determinePhase(poolAddress: string): Promise<MarketPhase> {
-    const bbWidth = await this.calculateBBWidth(poolAddress);
-    const rsi = await this.getRSI(poolAddress);
-    
-    if (bbWidth < 0.1) return 'ACCUMULATION';
-    if (rsi > 85) return 'DISTRIBUTION';
-    return 'NORMAL';
-  }
-}
-```
-
-## Implementation Checklist
-
-| Priority | Task                          | Code Reference              | Status |
-|----------|-------------------------------|-----------------------------|--------|
-| P0       | Position Creation Engine      | DLMMClient.ts (363-477)     | ✅      |
-| P0       | Transaction Retry Logic       | DLMMClient.ts (316-352)     | ✅      |
-| P1       | Dynamic Fee Model              | FeeModel.ts (New)           | ⏳      |
-| P1       | Volatility Oracle Integration | OracleService.ts (New)     | ⏳      |
-| P2       | MEV Protection Layer          | MEVShield.ts (New)          | ❌      |
-| P2       | Arbitrage Detection           | ArbitrageEngine.ts (New)    | ❌      |
-
-**Legend**:
-- ✅ Implemented
-- ⏳ In Progress
-- ❌ Not Started
-
-This plan directly connects strategic requirements with concrete implementation patterns from your codebase while maintaining alignment with the PRD objectives. Each component can be developed incrementally while maintaining system stability.
-
-02/03/2025
-## Updated Implementation Notes (v1.3)
-
-### Critical Architecture Improvements
-- **SDK Type Alignment**:
-  - Full integration with Meteora DLMM SDK types:
-    - `PositionInfo` → `LbPosition` mapping
-    - `positionData.totalXAmount/YAmount` access
-    - Bin ID number conversions
-  - Removed all custom type definitions
-  - Strict interface validation for pool parameters
-
-- **Risk Management Enhancements**:
-  - Drawdown detection using native SDK PositionData
-  - Volume collapse triggers via tokenX.mint tracking
-  - Bin range calculations from positionBinData
-  - Pool address injection pattern for position tracking
-
-- **Data Accuracy Upgrades**:
-  - Decimal normalization using token reserves
-  - BN to number conversions for financial calculations
-  - Position value derivation from active bin price
-  - SOL price oracle integration for USD conversions
-
-### Performance Optimizations
-- **Liquidity Operations**:
-  - Batch position updates via lbPairPositionsData
-  - Bin range compression for partial withdrawals
-  - Transaction batching for MEV protection
-  - Fee-aware position sizing
-
-**Implementation Checklist Update**:
-
-| Component              | Status | Details |
-|------------------------|--------|---------|
-| SDK Type Integration   | ✅      | Full PositionInfo/LbPosition alignment |
-| Risk Detection         | ✅      | Drawdown/volume triggers operational |
-| Decimal Handling       | ✅      | Token decimal normalization complete |
-| Pool Address Injection | ✅      | Position tracking via known pool key |
-
-## 3. Order Management System
-
-### 3.1 OrderManager Implementation
-
-**Purpose**: Centralized order execution for limit orders, take profits, and stop losses with price monitoring.
-
-**Key Features**:
-- Single monitoring interval for all order types
-- Supports partial/full position closures
-- Reuses existing DLMMClient operations
-- Matches codebase architecture patterns
-
-```typescript
-// orderManager.ts
-type OrderType = 'LIMIT'|'TAKE_PROFIT'|'STOP_LOSS';
-
-interface OrderConfig {
-  orderType: OrderType;
-  triggerPrice: number;
-  positionSize?: number; 
-  closeBps?: number; // 1-10000 (100% = 10000)
-}
-
-export class OrderManager {
-  private activeOrders = new Map<string, OrderConfig>();
-  
-  constructor(
-    private dlmmClient: DLMMClient,
-    private poolAddress: PublicKey
-  ) {}
-
-  public addOrder(orderId: string, config: OrderConfig) {
-    this.activeOrders.set(orderId, config);
-    this.startMonitoring();
-  }
-}
-```
-
-### 3.2 Implementation Guide
-
-**1. Initialization**  
-Add to existing manager initialization sequence:
-```typescript
-// index.ts
-const orderManager = new OrderManager(client, poolPublicKey);
-orderManager.addOrder('sol-2.5-limit', {
-  orderType: 'LIMIT',
-  triggerPrice: 2.5, 
-  positionSize: 1000 // $1000
-});
-```
-
-**2. Execution Flow**  
-```mermaid
-graph TD
-  A[60s Interval] --> B[Get Current Price]
-  B --> C{Check Order Triggers}
-  C -->|Limit Order| D[Create Position]
-  C -->|Take Profit/Stop Loss| E[Close Position]
-```
-
-**3. Key Integration Points**
-```typescript
-// Reuses existing DLMMClient methods
-dlmmClient.createPosition()    // Line 350-477
-dlmmClient.closePosition()     // Line 628-679  
-dlmmClient.removeLiquidity()   // Line 560-623
-dlmmClient.getUserPositions()  // Line 200-230
-```
-
-### 3.3 Best Practices
-
-1. **Order Identification**  
-   Use unique order IDs for tracking:
-   ```typescript
-   orderManager.addOrder('eth-1800-tp', {
-     orderType: 'TAKE_PROFIT',
-     triggerPrice: 1800,
-     closeBps: 5000 // Close 50%
-   });
-   ```
-
-2. **Partial Closures**  
-   Gradual position unwinding:
-   ```typescript
-   // 25% increments until full closure
-   const partialCloseOrder = {
-     orderType: 'STOP_LOSS',
-     triggerPrice: 1.8,
-     closeBps: 2500 
-   };
-   ```
-
-3. **Price Monitoring**  
-   Uses existing price feed:
-   ```typescript
-   // orderManager.ts
-   private async getCurrentPrice(): Promise<number> {
-     const activeBin = await this.dlmmClient.getActiveBin();
-     return activeBin.price; // From DLMMClient.ts:100-130
-   }
-   ```
-
-### 3.4 Validation Checklist
-
-✅ Test with 100% closure (closeBps: 10000)  
-✅ Verify price comparison logic (>, < operators)  
-✅ Confirm order removal after execution  
-✅ Monitor transaction fee costs
-
-### 3.5 Future Considerations
-
-- Dynamic order parameters based on volatility
-- Order expiration timestamps
-- Multi-pool order support
-
-## 7. Multi-Pool Management Architecture
-### Key Components:
-```mermaid
-graph TD
-    A[PassiveProcessManager] --> B[PositionStorage]
-    A --> C[DLMMClient]
-    B --> D[PositionSnapshotService]
-    C --> E[RiskManager]
-    C --> F[AutoCompounder]
-    E --> G[Circuit Breakers]
-    F --> H[Reward Tracking]
-```
-
-### Enhanced Position Handling Flow:
-1. **Multi-Pool Initialization**
-```typescript
-// Initialize for ALL active pools
-const positions = await dlmmClient.getUserPositions();
-const activePools = [...new Set(positions.map(p => p.poolAddress))];
-
-activePools.forEach(poolAddress => {
-  const manager = new PassiveProcessManager(dlmmClient, wallet, poolAddress);
-  manager.startAll();
-});
-```
-
-2. **Unified Position Metadata**
-```typescript
-interface AugmentedPosition {
-  publicKey: PublicKey;
-  poolAddress: PublicKey;
-  lbPair: {
-    tokenXMint: string;
-    tokenYMint: string;
-    binStep: number;
-    protocolFee: {
-      amountX: string;
-      amountY: string;
-    };
-  };
-  positionData: {
-    totalXAmount: BN;
-    totalYAmount: BN;
-    upperBinId: number;
-    lowerBinId: number;
-    feeX: BN;  // Unclaimed fees
-    feeY: BN;
-    totalClaimedFeeX: BN;
-    totalClaimedFeeY: BN;
-  };
-}
-```
-
-3. **Global Fee Tracking**
-```typescript
-// In PassiveProcessManager claim flow
-const claimTx = await dlmmClient.claimFees(position);
-console.log(`Claimed fees for ${position.publicKey}: 
-  X: ${claimTx.feeX.toString()} (Total claimed: ${position.totalClaimedFeeX})
-  Y: ${claimTx.feeY.toString()} (Total claimed: ${position.totalClaimedFeeY})`);
-```
-
-4. **Cross-Pool Processes**
-```typescript
-// Modified process management
-startAllProcesses() {
-  this.scheduleGlobalRewardClaims();
-  this.scheduleCrossPoolCompounding();
-  this.schedulePortfolioRebalance();
-}
-
-private scheduleGlobalRewardClaims() {
-  setInterval(async () => {
-    const positions = await this.dlmmClient.getAllUserPositions();
-    positions.forEach(pos => this.processPosition(pos));
-  }, 3 * 3600 * 1000);
-}
-```
-
-### Key Changes from Initial Design:
-1. **Position-Centric vs Pool-Centric**
-   - Original: Single pool focus
-   - Current: Auto-discovers all positions across pools using `dlmmClient.getUserPositions()`
-
-2. **Unified Fee Accounting**
-   ```mermaid
-   sequenceDiagram
-       Participant U as User
-       Participant P as PassiveProcessManager
-       Participant D as DLMMClient
-       U->>P: Start processes
-       P->>D: getAllUserPositions()
-       D-->>P: PositionInfo[]
-       P->>P: Track fees per position
-       P->>D: claimAllRewards(position)
-       D-->>P: Updated fee totals
-   ```
-
-3. **Risk Management Integration**
-   ```typescript
-   // Applies to all active positions
-   async checkPortfolioRisk() {
-     const positions = await this.dlmmClient.getUserPositions();
-     const riskStatus = await Promise.all(
-       positions.map(pos => 
-         this.riskManager.checkDrawdown(pos.poolAddress, 15)
-       )
-     );
-     return riskStatus.some(Boolean);
-   }
-   ```
-
-4. **Data Flow Optimization**
-   - Removed redundant pool-specific initializations
-   - Centralized position metadata through `PositionStorage`
-   - Cross-position analytics using `PositionSnapshotService`
-
-### Updated Architecture Principles:
-1. **Position Discovery First**  
-   Automatically detect all active positions on initialization
-
-2. **Fee Lifecycle Tracking**  
-   Maintain complete history of:
-   - Unclaimed fees (`feeX/feeY`)
-   - Lifetime claimed fees (`totalClaimedFeeX/Y`)
-   - Pending rewards from reward vaults
-
-3. **Process Isolation**  
-   Each position/pool combination handles its own:
-   - Fee claims
-   - Risk checks
-   - Rebalancing logic
-
-4. **Unified Monitoring**  
-   ```typescript
-   interface GlobalState {
-     positions: AugmentedPosition[];
-     portfolioValue: number;
-     totalFeesEarned: {
-       X: BN;
-       Y: BN;
-     };
-     riskStatus: Map<string, boolean>;
-   }
-   ```
-
-### 7.5 Monitoring Metrics
-| Metric                  | Calculation               | Alert Threshold |
-|-------------------------|---------------------------|-----------------|
-| Active Pools            | Unique poolAddress count  | >50             |
-| Cross-Pool Exposure     | ∑(PositionValue) / Total  | >30% single pool|
-| Compound Efficiency     | (CompoundedAmount / Fees) | <0.85           |
-
-## 12. Fee Tracking & APR Calculation
-
-### 12.1 Overview
-This module introduces rolling fee snapshots for each open liquidity position, enabling more accurate APR calculations over time. Rather than relying on a single "last fees" data point, the system stores a history of snapshots, detecting fee claims automatically and resetting the count when necessary.
-
-**Key Features**:
-1. **Fee History**: Maintains multiple fee snapshots (`feeHistory`) per position.  
-2. **Rolling APR**: Compares the oldest and newest snapshots within a given time window to project daily APR.  
-3. **Claim Detection**: Monitors significant drops in fees (e.g., >20% or below $0.05) to detect fee-claim events and reset the fee history, preventing negative or erroneous APR readings.  
-4. **Moving Average**: Utilizes an average position value (across snapshots) to smooth out short-term volatility in the APR calculation.
-
-### 12.2 Implementation Details
-Below is a high-level flow of the Fee Tracking & APR Calculation system:
-
-```mermaid
-graph LR
-    A[User Trade/Fees Accumulate] --> B[Dashboard Refresh (new snapshot)]
-    B --> C[feeHistory updated in PositionStorage]
-    C --> D{Fee Claim<br/>Detection?}
-    D -- Yes --> E[Reset feeHistory]
-    D -- No --> F[Calculate Rolling APR<br/>with oldest/newest snapshots]
-    F --> G[Store dailyAPR in PositionFeeData]
-```
-
-#### Fee Snapshots
-Each snapshot includes:  
-- **timestamp** (milliseconds since epoch)  
-- **feesUSD** (USD value of accrued fees)  
-- **positionValue** (USD value of total liquidity)  
-
-```typescript
-interface FeeSnapshot {
-  timestamp: number;
-  feesUSD: number;
-  positionValue: number;
-}
-```
-
-#### Rolling APR Calculation
-1. **Time Difference**:  
-   \[
-     \text{timeDiffMinutes} = \frac{\text{newestTimestamp} - \text{oldestTimestamp}}{1000 \times 60}
-   \]  
-2. **Fee Difference**:  
-   \[
-     \text{feeDiff} = \text{newestFeesUSD} - \text{oldestFeesUSD}
-   \]
-3. **Projected Daily Fees**:  
-   \[
-     \text{projectedDailyFees} = \text{feeDiff} \times \left(\frac{1440}{\text{timeDiffMinutes}}\right)
-   \]
-4. **Average Position Value**:  
-   \[
-     \text{avgPositionValue} = \frac{\sum(\text{snapshot.positionValue})}{\text{snapshotCount}}
-   \]
-5. **Daily APR**:  
-   \[
-     \text{dailyAPR} = \frac{\text{projectedDailyFees}}{\text{avgPositionValue}} \times 100
-   \]
-   
-A safety cap (e.g., 50% daily) may be applied to prevent unrealistic short-term spikes.
-
-### 12.3 Claim Detection & History Reset
-When a snapshot shows **feesUSD** notably lower than the previous data point, we infer a claim event has occurred—resetting the fee history:
-
-- **20% Drop Threshold**: If `feeData.feesUSD < lastFeesUSD * 0.8`, consider it a claimed event.  
-- **Minimum Fee Threshold**: If `feesUSD < $0.05`, treat this as a claim event, too.
-
-Resetting the fee history ensures that subsequent fee differences remain accurate and do not falsely register as negative or inflated changes.
-
-### 12.4 Integration with Dashboard
-The **Dashboard** now:
-1. **Captures Current Time** each run, storing a new snapshot under `feeHistory`.  
-2. **Displays Rolling APR** (Daily + Projected Annual).  
-3. **Prints Time Since Last Snapshot** in human-readable format (e.g., "3 hours 10 minutes ago").  
-4. Logs any **fee claim events** detected.
-
-```typescript
-// Example snippet illustrating snapshot creation in dashboard
-this.positionStorage.updatePositionFeeData(
-  positionPublicKey,
-  {
-    feeX: positionData.feeX || "0",
-    feeY: positionData.feeY || "0",
-    feesUSD: positionData.pendingFeesUSD,
-    positionValue: positionData.currentValue || 0,
-    timestamp: Date.now()
-  }
-);
-```
-
----
-
-## 13. Implementation Checklist (Updated)
-
-| Component                     | Status | Details                                                         | Code Reference          |
-|------------------------------|--------|-----------------------------------------------------------------|-------------------------|
-| Fee Snapshot System          | ✅     | Tracks multiple fee data points across time                     | PositionStorage.ts      |
-| Rolling APR Calculation      | ✅     | Uses oldest & newest snapshots for daily APR                    | PositionStorage.ts      |
-| Fee Claim Detection          | ✅     | Resets history upon suspected fee claim (≥20% drop or <\$0.05)  | PositionStorage.ts      |
-| Dashboard Time Diff & APR    | ✅     | Logs "X hours/minutes ago" & shows daily + annualized APR       | dashboard.ts            |
-| Min Time Gap Enforcement     | ⏳     | Optionally skip APR calc for sub-15 minute intervals (planned)  | N/A                     |
-
-### Strategic Impact
-- **Accurate Performance Visibility**: By averaging multiple snapshots, short-term volatility is accounted for, so daily APR readings reflect actual performance trends.  
-- **Automatic Claim Handling**: Sudden drops in fees are detected; fee history is reset to prevent negative or unrealistic APR.  
-- **Data-Driven Adjustments**: Risk managers and rebalancing logic can leverage the newly available dailyAPR to decide whether to move liquidity between pools or alter position sizes.  
-
-These enhancements seamlessly integrate with existing sections—particularly the *Monitoring & Reporting Framework* (Section 5) and the *Multi-Pool Management* architecture (Section 7)—ensuring more robust, data-driven liquidity strategies. 
 
