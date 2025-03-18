@@ -8,6 +8,7 @@ import { BN } from '@coral-xyz/anchor';
 import { ComputeBudgetProgram, sendAndConfirmTransaction } from '@solana/web3.js';
 import { PositionStorage } from './utils/PositionStorage';
 import { Config } from './models/Config';
+import { withSafeKeypair } from './utils/walletHelper';
 
 // Mock data generator for testing
 const MOCK_VOLUME_DATA: VolumeData[] = [
@@ -241,10 +242,13 @@ export class RiskManager {
           tx.recentBlockhash = blockhash;
           tx.feePayer = this.wallet.publicKey;
           
-          // Sign and send
-          const signature = await sendAndConfirmTransaction(
-            this.connection, tx, [this.wallet], { skipPreflight: false, commitment: 'confirmed' }
-          );
+          // Use withSafeKeypair instead of direct wallet access
+          const signature = await withSafeKeypair(this.config, async (keypair) => {
+            return sendAndConfirmTransaction(
+              this.connection, tx, [keypair], 
+              { skipPreflight: false, commitment: 'confirmed' }
+            );
+          });
           console.log('Transaction Signature:', signature);
         }
       } else {
@@ -256,10 +260,13 @@ export class RiskManager {
         txOrTxs.recentBlockhash = blockhash;
         txOrTxs.feePayer = this.wallet.publicKey;
         
-        // Sign and send
-        const signature = await sendAndConfirmTransaction(
-          this.connection, txOrTxs, [this.wallet], { skipPreflight: false, commitment: 'confirmed' }
-        );
+        // Use withSafeKeypair instead of direct wallet access
+        const signature = await withSafeKeypair(this.config, async (keypair) => {
+          return sendAndConfirmTransaction(
+            this.connection, txOrTxs, [keypair], 
+            { skipPreflight: false, commitment: 'confirmed' }
+          );
+        });
         console.log('Transaction Signature:', signature);
       }
 
@@ -348,10 +355,13 @@ export class RiskManager {
             tx.recentBlockhash = blockhash;
             tx.feePayer = this.wallet.publicKey;
             
-            // Sign and send
-            const signature = await sendAndConfirmTransaction(
-              this.connection, tx, [this.wallet], { skipPreflight: false, commitment: 'confirmed' }
-            );
+            // Use withSafeKeypair instead of direct wallet access
+            const signature = await withSafeKeypair(this.config, async (keypair) => {
+              return sendAndConfirmTransaction(
+                this.connection, tx, [keypair], 
+                { skipPreflight: false, commitment: 'confirmed' }
+              );
+            });
             console.log('Transaction Signature:', signature);
           }
         } else {
@@ -363,10 +373,13 @@ export class RiskManager {
           txOrTxs.recentBlockhash = blockhash;
           txOrTxs.feePayer = this.wallet.publicKey;
           
-          // Sign and send
-          const signature = await sendAndConfirmTransaction(
-            this.connection, txOrTxs, [this.wallet], { skipPreflight: false, commitment: 'confirmed' }
-          );
+          // Use withSafeKeypair instead of direct wallet access
+          const signature = await withSafeKeypair(this.config, async (keypair) => {
+            return sendAndConfirmTransaction(
+              this.connection, txOrTxs, [keypair], 
+              { skipPreflight: false, commitment: 'confirmed' }
+            );
+          });
           console.log('Transaction Signature:', signature);
         }
         

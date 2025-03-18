@@ -13,6 +13,7 @@ import * as os from 'os';
 import { swapTokensWithRetry } from './utils/swapTokens';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { getTokenPricesJupiter, getTokenPriceJupiter } from './utils/fetchPriceJupiter';
+import { withSafeKeypair } from './utils/walletHelper';
 
 interface MarketInfo {
   name: string;
@@ -31,11 +32,13 @@ export class MarketSelector {
   private connection: Connection;
   private wallet: Keypair;
   private positionStorage: PositionStorage;
+  private config: Config;
   
   constructor(
     connection: Connection, 
     wallet: Keypair, 
-    positionStorage: PositionStorage
+    positionStorage: PositionStorage,
+    config: Config
   ) {
     // Get market data from JSON file
     const marketsPath = path.join(__dirname, 'models', 'marketSelection.json');
@@ -46,6 +49,7 @@ export class MarketSelector {
     this.connection = connection;
     this.wallet = wallet;
     this.positionStorage = positionStorage;
+    this.config = config;
   }
 
   public async promptUserForMarketSelection(): Promise<MarketInfo> {
@@ -213,13 +217,15 @@ export class MarketSelector {
         // Perform the swap - direction parameter is swapYtoX
         // If singleSidedX is true, we need X, so swapYtoX should be true (Y->X)
         // If singleSidedX is false, we need Y, so swapYtoX should be false (X->Y)
-        await swapTokensWithRetry(
-          this.connection,
-          dlmm,
-          swapAmount,
-          singleSidedX, // This matches our need: true = Y->X, false = X->Y
-          this.wallet
-        );
+        await withSafeKeypair(this.config, async (keypair) => {
+          return swapTokensWithRetry(
+            this.connection,
+            dlmm,
+            swapAmount,
+            singleSidedX, // This matches our need: true = Y->X, false = X->Y
+            keypair
+          );
+        });
         
         console.log('Swap completed, continuing to position creation');
         
@@ -254,15 +260,17 @@ export class MarketSelector {
       
       console.log(`Converting $${dollarAmount} to ${tokenAmount} tokens (${tokenAmountLamports} lamports)`);
       
-      // Call your existing createSingleSidePosition function
-      await createSingleSidePosition(
-        this.connection,
-        dlmm,
-        this.wallet,
-        tokenAmountBN,
-        singleSidedX,
-        this.positionStorage
-      );
+      // Call your existing createSingleSidePosition function with withSafeKeypair
+      await withSafeKeypair(this.config, async (keypair) => {
+        return createSingleSidePosition(
+          this.connection,
+          dlmm,
+          keypair,
+          tokenAmountBN,
+          singleSidedX,
+          this.positionStorage
+        );
+      });
       
       console.log(`Position creation completed in ${chosenMarket.name}`);
     } catch (error) {
@@ -319,7 +327,7 @@ if (require.main === module) {
       }
       
       // Create the market selector with your connection, wallet and storage
-      const marketSelector = new MarketSelector(connection, walletKeypair, positionStorage);
+      const marketSelector = new MarketSelector(connection, walletKeypair, positionStorage, config);
       
       // Prompt user to select a market
       console.log("Please select a market:");

@@ -4,28 +4,31 @@ import { initializeUserPools } from './utils/createMultiplePools';
 import { AutoCompounder } from './autoCompounder';
 import { Config } from './models/Config';
 import { sendAndConfirmTransaction } from '@solana/web3.js';
+import { withSafeKeypair } from './utils/walletHelper';
 
 export class PassiveProcessManager {
   private intervalIds: NodeJS.Timeout[] = [];
   private initializedPools: DLMM[] = [];
+  public config!: Config;
   
   constructor(
     private connection: Connection,
     private wallet: Keypair
-  ) {}
+  ) {
+  }
 
   public async startAll() {
-    const config = await Config.load();
+    this.config = await Config.load();
     const { initializedPools, positionMap } = await initializeUserPools(
         this.connection,
         this.wallet.publicKey
     );
     this.initializedPools = initializedPools;
     
-    if (config.autoClaimEnabled) {
+    if (this.config.autoClaimEnabled) {
         this.scheduleRewardClaims(positionMap);
     }
-    if (config.autoCompoundEnabled) {
+    if (this.config.autoCompoundEnabled) {
         this.scheduleAutoCompound();
     }
   }
@@ -67,13 +70,12 @@ export class PassiveProcessManager {
 
   private scheduleAutoCompound() {
     const interval = setInterval(async () => {
-      const config = await Config.load();
       for (const pool of this.initializedPools) {
         const compounder = new AutoCompounder(
           this.connection,
           pool,
           this.wallet,
-          config
+          this.config
         );
         await compounder.autoCompound();
       }
@@ -83,12 +85,14 @@ export class PassiveProcessManager {
   }
 
   private async sendTransactionWithBackoff(tx: Transaction) {
-    return sendAndConfirmTransaction(
-      this.connection,
-      tx,
-      [this.wallet],
-      { commitment: 'confirmed' }
-    );
+    return withSafeKeypair(this.config, async (keypair) => {
+      return sendAndConfirmTransaction(
+        this.connection,
+        tx,
+        [keypair],
+        { commitment: 'confirmed' }
+      );
+    });
   }
 
   public stopAll() {

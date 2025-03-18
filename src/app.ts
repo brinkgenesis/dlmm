@@ -48,7 +48,8 @@ export class TradingApp {
     this.marketSelector = new MarketSelector(
       this.connection,
       this.wallet,
-      this.positionStorage
+      this.positionStorage,
+      this.config
     );
   }
 

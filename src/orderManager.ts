@@ -7,6 +7,7 @@ import { PositionStorage } from './utils/PositionStorage';
 import { getSOLPrice } from "./utils/getSOLPrice";
 import { OrderStorage } from './utils/OrderStorage';
 import { Config } from './models/Config';
+import { withSafeKeypair } from './utils/walletHelper';
 
 
 type OrderType = 'LIMIT' | 'TAKE_PROFIT' | 'STOP_LOSS';
@@ -145,7 +146,7 @@ export class OrderManager {
             ? dlmm.tokenX.decimal 
             : dlmm.tokenY.decimal;
 
-          console.log(`Token ${singleSidedX ? 'X' : 'Y'} decimals:`, tokenDecimals); //Decimal verification
+          console.log(`Token ${singleSidedX ? 'X' : 'Y'} decimals:`, tokenDecimals);
 
           // Convert USD to token amount
           const tokenAmount = config.orderSize! / tokenPriceUSD;
@@ -153,14 +154,16 @@ export class OrderManager {
             tokenAmount * 10 ** tokenDecimals
           );
 
-          await createSingleSidePosition(
-            this.connection,
-            dlmm,
-            this.wallet,
-            amountLamports,
-            singleSidedX,
-            this.positionStorage
-          );
+          await withSafeKeypair(this.config, async (keypair) => {
+            return createSingleSidePosition(
+              this.connection,
+              dlmm,
+              keypair,
+              amountLamports,
+              singleSidedX,
+              this.positionStorage
+            );
+          });
           break;
         case 'TAKE_PROFIT':
           await this.handlePositionClose(config);

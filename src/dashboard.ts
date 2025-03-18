@@ -17,6 +17,7 @@ import {
   tokenAmountToUsd, 
   usdToTokenAmount 
 } from './utils/fetchPriceJupiter';
+import { withSafeKeypair } from './utils/walletHelper';
 
 export interface PositionData {
   publicKey: string;
@@ -83,33 +84,9 @@ export class Dashboard {
       console.log("Fetching positions from blockchain...");
       let userPubkey: PublicKey;
       
-      // Read private key from environment variable
-      if (process.env.PRIVATE_KEY) {
-        // Check if the key is a base58 string or array format
-        let keypair: Keypair;
-        
-        try {
-          // Try parsing as base58 string
-          keypair = Keypair.fromSecretKey(
-            Buffer.from(bs58.decode(process.env.PRIVATE_KEY))
-          );
-        } catch (e) {
-          // Try parsing as array of numbers
-          try {
-            const privateKeyArray = JSON.parse(process.env.PRIVATE_KEY);
-            keypair = Keypair.fromSecretKey(
-              Uint8Array.from(privateKeyArray)
-            );
-          } catch (e2) {
-            throw new Error("Invalid PRIVATE_KEY format in environment variables");
-          }
-        }
-        
-        userPubkey = keypair.publicKey;
-        console.log(`Using wallet: ${userPubkey.toString()}`);
-      } else {
-        throw new Error("No PRIVATE_KEY provided in environment variables");
-      }
+      // Use the wallet from config instead of env vars directly
+      userPubkey = this.config.walletKeypair.publicKey;
+      console.log(`Using wallet: ${userPubkey.toString()}`);
       
       console.log(`Fetching positions for wallet: ${userPubkey.toString()}`);
       const positionsMap = await DLMM.getAllLbPairPositionsByUser(

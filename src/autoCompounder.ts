@@ -6,6 +6,7 @@ import { createSingleSidePosition } from './utils/createSingleSidePosition';
 import { BN } from '@coral-xyz/anchor';
 import { sendAndConfirmTransaction } from '@solana/web3.js';
 import { Config } from './models/Config';
+import { withSafeKeypair } from './utils/walletHelper';
 
 export class AutoCompounder {
   private positionStorage: PositionStorage;
@@ -14,7 +15,7 @@ export class AutoCompounder {
     private connection: Connection,
     private pool: DLMM,
     private wallet: Keypair,
-    config: Config
+    private config: Config
   ) {
     this.positionStorage = new PositionStorage(config);
   }
@@ -27,28 +28,32 @@ export class AutoCompounder {
         positions: await this.getUserPositions()
       });
 
-      // Send and confirm transactions using web3.js helper
+      // Send and confirm transactions using withSafeKeypair
       for (const tx of claimTxs) {
-        const signature = await sendAndConfirmTransaction(
-          this.connection,
-          tx,
-          [this.wallet], // Only wallet signs claim transactions
-          { commitment: 'confirmed' }
-        );
+        const signature = await withSafeKeypair(this.config, async (keypair) => {
+          return sendAndConfirmTransaction(
+            this.connection,
+            tx,
+            [keypair], // Use keypair from withSafeKeypair
+            { commitment: 'confirmed' }
+          );
+        });
         console.log('✅ Rewards claimed:', signature);
       }
 
       // 2. Create new position with balance
       const tokenXBalance = await this.getTokenXBalance();
       if (tokenXBalance > 0) {
-        await createSingleSidePosition(
-          this.connection,
-          this.pool,
-          this.wallet,
-          new BN(tokenXBalance),
-          true,
-          this.positionStorage
-        );
+        await withSafeKeypair(this.config, async (keypair) => {
+          return createSingleSidePosition(
+            this.connection,
+            this.pool,
+            keypair,
+            new BN(tokenXBalance),
+            true,
+            this.positionStorage
+          );
+        });
       }
     } catch (error) {
       console.error('Auto-compound failed:', error);

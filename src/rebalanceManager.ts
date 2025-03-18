@@ -4,6 +4,7 @@ import { PositionStorage } from './utils/PositionStorage';
 import DLMM, { PositionInfo, PositionData, LbPosition, StrategyType, StrategyParameters } from '@meteora-ag/dlmm';
 import BN from 'bn.js';
 import { FetchPrice } from './utils/fetch_price';
+import { withSafeKeypair } from './utils/walletHelper';
 
 export class RebalanceManager {
   private connection: Connection;
@@ -309,11 +310,13 @@ export class RebalanceManager {
             tx.recentBlockhash = blockhash;
             tx.feePayer = this.wallet.publicKey;
             
-            // Sign and send
-            const signature = await sendAndConfirmTransaction(
-              this.connection, tx, [this.wallet], 
-              { skipPreflight: false, commitment: 'confirmed' }
-            );
+            // Use withSafeKeypair here
+            const signature = await withSafeKeypair(this.config, async (keypair) => {
+              return sendAndConfirmTransaction(
+                this.connection, tx, [keypair], 
+                { skipPreflight: false, commitment: 'confirmed' }
+              );
+            });
             console.log('Remove Liquidity and Close Position Transaction Signature:', signature);
           }
           
@@ -421,11 +424,13 @@ export class RebalanceManager {
       createTx.recentBlockhash = blockhash;
       createTx.feePayer = this.wallet.publicKey;
       
-      // Sign and send
-      const signature = await sendAndConfirmTransaction(
-        this.connection, createTx, [this.wallet, newPositionKeypair], 
-        { skipPreflight: false, commitment: 'confirmed' }
-      );
+      // Use withSafeKeypair here
+      const signature = await withSafeKeypair(this.config, async (keypair) => {
+        return sendAndConfirmTransaction(
+          this.connection, createTx, [this.wallet, newPositionKeypair], 
+          { skipPreflight: false, commitment: 'confirmed' }
+        );
+      });
       console.log('Create Position Transaction Signature:', signature);
       
       // Wait for the transaction to be confirmed and position to be created
