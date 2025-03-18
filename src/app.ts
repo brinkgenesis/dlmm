@@ -1,12 +1,15 @@
 import { PassiveProcessManager } from './passiveProcess';
 import { OrderManager } from './orderManager';
-import { Connection, Keypair, PublicKey } from '@solana/web3.js';
+import { Connection, Keypair, PublicKey, Transaction, TransactionInstruction } from '@solana/web3.js';
 import { Config } from './models/Config';
 import { PositionStorage } from './utils/PositionStorage';
 import { RiskManager } from './riskManager';
 import { RebalanceManager } from './rebalanceManager';
 import { Dashboard, PositionData } from './dashboard';
 import { MarketSelector } from './marketSelector';
+import { UserConfig } from '../frontend/wallet/UserConfig';
+import bs58 from 'bs58';
+
 
 export class TradingApp {
   private passiveManager?: PassiveProcessManager;
@@ -18,13 +21,16 @@ export class TradingApp {
   private riskMonitoringInterval?: NodeJS.Timeout;
   private rebalanceInterval?: NodeJS.Timeout;
   private marketSelector: MarketSelector;
+  private delegationPDA?: PublicKey;
+  private userPublicKey?: PublicKey;
 
   constructor(
     public connection: Connection,
-    public wallet: Keypair
+    public wallet: Keypair,
+    config: Config
   ) {
     console.log('Starting DLMM Manager...');
-    this.config = Config.loadSync();
+    this.config = config;
     console.log('Config loaded successfully');
     
     this.positionStorage = new PositionStorage(this.config);
@@ -255,5 +261,105 @@ export class TradingApp {
   // Add getter method for marketSelector
   public getMarketSelector(): MarketSelector {
     return this.marketSelector;
+  }
+
+  /**
+   * Initializes TradingApp with a delegated user wallet
+   */
+  public static async createForDelegatedUser(
+    connection: Connection,
+    userWalletPublicKey: PublicKey
+  ): Promise<TradingApp> {
+    const userConfig = await UserConfig.loadForUser(userWalletPublicKey.toString());
+    
+    // Create instance with server wallet
+    const serverWallet = Keypair.fromSecretKey(
+      bs58.decode(process.env.SERVER_SIGNING_KEY!)
+    );
+    
+    const app = new TradingApp(connection, serverWallet, userConfig);
+    return app;
+  }
+
+  // Add a helper method to sign transactions based on mode
+  private async signTransaction(transaction: Transaction): Promise<Transaction> {
+    // Check for delegation mode
+    if (this.isDelegationConfig(this.config)) {
+      return this.signWithDelegation(transaction);
+    } else {
+      // Original signing with wallet keypair
+      transaction.feePayer = this.wallet.publicKey;
+      transaction.recentBlockhash = (
+        await this.connection.getRecentBlockhash()
+      ).blockhash;
+      transaction.sign(this.wallet);
+      return transaction;
+    }
+  }
+
+  // Add delegation signing method
+  private async signWithDelegation(transaction: Transaction): Promise<Transaction> {
+    const userWalletPublicKey = this.getUserPublicKey();
+    const delegationPDA = this.getDelegationPDA();
+    
+    if (!userWalletPublicKey || !delegationPDA) {
+      throw new Error('Delegation information missing');
+    }
+    
+    // Add delegation verification instruction
+    const delegationInstruction = new TransactionInstruction({
+      keys: [
+        { pubkey: userWalletPublicKey, isSigner: false, isWritable: false },
+        { pubkey: delegationPDA, isSigner: false, isWritable: false },
+        // Add other required accounts
+      ],
+      programId: new PublicKey(process.env.DELEGATION_PROGRAM_ID!),
+      data: Buffer.from([/* instruction data */])
+    });
+    
+    transaction.add(delegationInstruction);
+    transaction.feePayer = userWalletPublicKey;
+    
+    // In this mode, server would sign the transaction with its key
+    transaction.sign(this.wallet);
+    
+    return transaction;
+  }
+
+  // Add helper method to check if config is a UserConfig with delegation
+  private isDelegationConfig(config: Config): boolean {
+    return 'delegationMode' in config && (config as any).delegationMode === true;
+  }
+
+  // Replace direct delegation property access with type-safe methods
+  private getUserPublicKey(): PublicKey | undefined {
+    if (this.isDelegationConfig(this.config)) {
+      return (this.config as any).userWalletPublicKey;
+    }
+    return undefined;
+  }
+
+  private getDelegationPDA(): PublicKey | undefined {
+    if (this.isDelegationConfig(this.config)) {
+      return (this.config as any).delegationPDA;
+    }
+    return undefined;
+  }
+
+  // Static factory method for creating user-specific instance
+  public static async createForUser(
+    userPublicKey: PublicKey,
+    connection: Connection
+  ): Promise<TradingApp> {
+    // Create delegated config
+    const config = await UserConfig.loadForUser(userPublicKey.toString());
+    
+    // Create app with the server's signing wallet
+    const serverWallet = Keypair.fromSecretKey(
+      bs58.decode(process.env.SERVER_SIGNING_KEY!)
+    );
+    
+    const app = new TradingApp(connection, serverWallet, config);
+    return app;
   }
 } 

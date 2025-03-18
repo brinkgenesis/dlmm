@@ -6,6 +6,11 @@ import { Dashboard } from './src/dashboard';
 import limiter from 'express-rate-limit';
 import bs58 from 'bs58';
 import * as dotenv from 'dotenv';
+import crypto from 'crypto';
+import nacl from 'tweetnacl';
+import jwt from 'jsonwebtoken';
+import { UserConfig } from './frontend/wallet/UserConfig';
+import { Config } from './src/models/Config';
 dotenv.config();
 
 // Initialize core components
@@ -13,7 +18,8 @@ const connection = new Connection(process.env.SOLANA_RPC!);
 const wallet = Keypair.fromSecretKey(
   bs58.decode(process.env.PRIVATE_KEY!)
 );
-const tradingApp = new TradingApp(connection, wallet);
+const config = Config.loadSync();
+const tradingApp = new TradingApp(connection, wallet, config);
 
 // Express setup
 const app = express();
@@ -136,7 +142,8 @@ app.post('/api/markets/select', async (req, res) => {
   try {
     const { poolAddress, singleSidedX } = req.body;
     if (!poolAddress) {
-      return res.status(400).json({ success: false, error: 'Pool address is required' });
+      res.status(400).json({ success: false, error: 'Pool address is required' });
+      return;
     }
     
     const marketSelector = tradingApp.getMarketSelector();
@@ -147,10 +154,11 @@ app.post('/api/markets/select', async (req, res) => {
     );
     
     if (!chosenMarket) {
-      return res.status(404).json({ 
+      res.status(404).json({ 
         success: false, 
         error: `Market with pool address ${poolAddress} not found`
       });
+      return;
     }
     
     // Use the existing methods in sequence
@@ -172,6 +180,130 @@ app.post('/api/markets/select', async (req, res) => {
     res.status(500).json({ 
       success: false, 
       error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Wallet Connection Endpoints
+const challenges: { [key: string]: string } = {};
+const userTradingApps: { [key: string]: TradingApp } = {};
+
+app.post('/api/wallet/connect', async (req, res) => {
+  try {
+    const { publicKey } = req.body;
+    if (!publicKey) {
+      res.status(400).json({ success: false, error: 'Public key is required' });
+      return;
+    }
+    
+    // Generate a random challenge for the user to sign
+    const challenge = crypto.randomBytes(32).toString('hex');
+    
+    // Store the challenge in a session or temporary DB
+    // This is a simplified version - you should use proper session management
+    challenges[publicKey] = challenge;
+    
+    res.json({ success: true, challenge });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
+    return;
+  }
+});
+
+app.post('/api/wallet/verify', async (req, res) => {
+  try {
+    const { publicKey, signature } = req.body;
+    if (!publicKey || !signature) {
+      res.status(400).json({ 
+        success: false, 
+        error: 'Public key and signature are required' 
+      });
+      return;
+    }
+    
+    // Get the challenge from session or DB
+    const challenge = challenges[publicKey];
+    if (!challenge) {
+      res.status(400).json({ 
+        success: false, 
+        error: 'Challenge not found or expired' 
+      });
+      return;
+    }
+    
+    // Verify the signature
+    const verified = nacl.sign.detached.verify(
+      new TextEncoder().encode(challenge),
+      bs58.decode(signature),
+      new PublicKey(publicKey).toBuffer()
+    );
+    
+    if (!verified) {
+      res.status(401).json({ success: false, error: 'Invalid signature' });
+      return;
+    }
+    
+    // Generate JWT or session token
+    const token = jwt.sign({ publicKey }, process.env.JWT_SECRET!, { expiresIn: '24h' });
+    
+    // Delete the challenge
+    delete challenges[publicKey];
+    
+    res.json({ success: true, token });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
+    return;
+  }
+});
+
+app.post('/api/wallet/delegate', async (req, res) => {
+  try {
+    // This endpoint would be called after the user signs a transaction in their wallet
+    // to delegate authority to the bot
+    const { publicKey, signature, delegation } = req.body;
+    
+    // Verify the delegation transaction was successful
+    // This would involve checking if the transaction was confirmed
+    const txId = req.body.txId;
+    const connection = new Connection(process.env.SOLANA_RPC!);
+    const status = await connection.confirmTransaction(txId);
+    
+    if (!status.value.err) {
+      // Create a user-specific config and trading app instance
+      const userConfig = await UserConfig.loadForUser(publicKey);
+      
+      // Use the server's wallet for signing delegation transactions
+      const serverWallet = wallet;
+      userTradingApps[publicKey] = userTradingApps[publicKey] || new TradingApp(
+        connection,
+        serverWallet, // Use server wallet for signing delegation transactions
+        userConfig
+      );
+      
+      // Initialize user's trading app
+      await userTradingApps[publicKey].initialize();
+      
+      res.json({ 
+        success: true, 
+        message: 'Delegation successful',
+        expiry: userConfig.delegationExpiry
+      });
+    } else {
+      res.status(400).json({ 
+        success: false, 
+        error: 'Delegation transaction failed' 
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
     });
   }
 });

@@ -98,7 +98,7 @@ export class Config {
     }
   }
 
-  private static initializeConnection(): Connection {
+  public static initializeConnection(): Connection {
     try {
       const rpcUrl = process.env.SOLANA_RPC!;
       const wsEndpoint = process.env.SOLANA_WSS!;

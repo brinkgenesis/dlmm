@@ -9,7 +9,6 @@ import inquirer from 'inquirer';
 import * as fs from 'fs';
 import * as path from 'path';
 import { calculateTokenAmounts } from './utils/calculateAmounts';
-import { PositionManager } from './managePosition';
 import { PassiveProcessManager } from './passiveProcess';
 /**
  * Main execution block
@@ -134,8 +133,7 @@ import { PassiveProcessManager } from './passiveProcess';
   
     //start Position Manager
     console.log(`Starting Position Manager`);
-    const positionManager = new PositionManager(client, poolPublicKey);
-    positionManager.monitorAndAdjust(); // Starts 30m interval
+    
    
     const passiveManager = new PassiveProcessManager(client.connection, config.walletKeypair);
     passiveManager.startAll();
