@@ -266,44 +266,92 @@ app.post('/api/wallet/delegate', async (req, res) => {
   try {
     // This endpoint would be called after the user signs a transaction in their wallet
     // to delegate authority to the bot
-    const { publicKey, signature, delegation } = req.body;
+    const { publicKey, signature, delegation, txId } = req.body;
     
-    // Verify the delegation transaction was successful
-    // This would involve checking if the transaction was confirmed
-    const txId = req.body.txId;
-    const connection = new Connection(process.env.SOLANA_RPC!);
-    const status = await connection.confirmTransaction(txId);
-    
-    if (!status.value.err) {
-      // Create a user-specific config and trading app instance
-      const userConfig = await UserConfig.loadForUser(publicKey);
-      
-      // Use the server's wallet for signing delegation transactions
-      const serverWallet = wallet;
-      userTradingApps[publicKey] = userTradingApps[publicKey] || new TradingApp(
-        connection,
-        serverWallet, // Use server wallet for signing delegation transactions
-        userConfig
-      );
-      
-      // Initialize user's trading app
-      await userTradingApps[publicKey].initialize();
-      
-      res.json({ 
-        success: true, 
-        message: 'Delegation successful',
-        expiry: userConfig.delegationExpiry
-      });
-    } else {
+    // Input validation
+    if (!publicKey || !txId) {
       res.status(400).json({ 
         success: false, 
-        error: 'Delegation transaction failed' 
+        error: 'Missing required parameters: publicKey and txId' 
       });
+      return;
     }
+    
+    // Verify the delegation transaction was successful
+    const connection = new Connection(process.env.SOLANA_RPC!);
+    try {
+      const status = await connection.confirmTransaction(txId);
+      
+      if (status.value.err) {
+        res.status(400).json({ 
+          success: false, 
+          error: 'Delegation transaction failed on chain',
+          details: status.value.err
+        });
+        return;
+      }
+    } catch (txError) {
+      res.status(400).json({ 
+        success: false, 
+        error: 'Failed to confirm delegation transaction',
+        details: txError instanceof Error ? txError.message : String(txError)
+      });
+      return;
+    }
+    
+    // Create user config and verify delegation exists
+    let userConfig;
+    try {
+      userConfig = await UserConfig.loadForUser(publicKey);
+      
+      if (!userConfig.delegationActive) {
+        res.status(400).json({ 
+          success: false, 
+          error: 'Delegation account exists but is not active',
+          details: `Expiry: ${userConfig.delegationExpiry}`
+        });
+        return;
+      }
+    } catch (configError) {
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to load user configuration',
+        details: configError instanceof Error ? configError.message : String(configError)
+      });
+      return;
+    }
+    
+    // Use the server's wallet for signing delegation transactions
+    const serverWallet = wallet;
+    userTradingApps[publicKey] = userTradingApps[publicKey] || new TradingApp(
+      connection,
+      serverWallet,
+      userConfig
+    );
+    
+    // Initialize user's trading app
+    try {
+      await userTradingApps[publicKey].initialize();
+    } catch (initError) {
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to initialize trading app with delegation',
+        details: initError instanceof Error ? initError.message : String(initError)
+      });
+      return;
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Delegation successful',
+      expiry: userConfig.delegationExpiry,
+      delegationAddress: userConfig.delegationPDA?.toString()
+    });
   } catch (error) {
     res.status(500).json({ 
       success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+      error: 'Unexpected error during delegation setup',
+      details: error instanceof Error ? error.message : String(error)
     });
   }
 });

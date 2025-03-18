@@ -306,15 +306,30 @@ export class TradingApp {
       throw new Error('Delegation information missing');
     }
     
+    // Calculate operations to verify based on what's in the transaction
+    // This is a simplified version - you'll need logic to determine operations
+    const operationType = 1; // Example: 1 = create position, 2 = close position, etc.
+    const amount = 1000000; // Example amount in lamports/smallest units
+    
+    // Build verification instruction data
+    // This follows the VerifyTransaction variant in the Rust enum
+    // [2] = instruction index for VerifyTransaction
+    // Then encode the parameters
+    const instructionData = Buffer.from([
+      2, // Instruction index for VerifyTransaction
+      ...new Uint8Array(new BigUint64Array([BigInt(amount)]).buffer), // amount as u64
+      ...new Uint8Array(new Uint32Array([operationType]).buffer), // operation_type as u32
+    ]);
+    
     // Add delegation verification instruction
     const delegationInstruction = new TransactionInstruction({
       keys: [
         { pubkey: userWalletPublicKey, isSigner: false, isWritable: false },
         { pubkey: delegationPDA, isSigner: false, isWritable: false },
-        // Add other required accounts
+        { pubkey: this.wallet.publicKey, isSigner: true, isWritable: false },
       ],
       programId: new PublicKey(process.env.DELEGATION_PROGRAM_ID!),
-      data: Buffer.from([/* instruction data */])
+      data: instructionData
     });
     
     transaction.add(delegationInstruction);
