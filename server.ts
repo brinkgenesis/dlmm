@@ -10,6 +10,7 @@ import crypto from 'crypto';
 import nacl from 'tweetnacl';
 import jwt from 'jsonwebtoken';
 import { UserConfig } from './frontend/wallet/UserConfig';
+import cors from 'cors'; // Add this import
 import { Config } from './src/models/Config';
 dotenv.config();
 
@@ -24,6 +25,13 @@ const tradingApp = new TradingApp(connection, wallet, config);
 // Express setup
 const app = express();
 app.use(bodyParser.json());
+
+// Add CORS configuration
+app.use(cors({
+  origin: 'http://localhost:8080', // Your client's URL
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 // Set up rate limiting
 app.use('/api/orders', limiter({
