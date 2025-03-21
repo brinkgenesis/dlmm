@@ -2,22 +2,63 @@
 
 ## Introduction
 
-This bot automates liquidity management in Meteora's Dynamic Liquidity Market Maker (DLMM) pools to maximize fee collection and mitigate impermanent loss.
+This bot automates liquidity management in Meteora's Dynamic Liquidity Market Maker (DLMM) pools to maximize fee collection and mitigate impermanent loss. It provides professional-grade risk management and implements multiple liquidity provision strategies for optimized returns.
 
-## Features
+## Key Features
 
-- Dynamic liquidity provision based on market volatility.
-- Supports multiple strategies (Spot, Curve, Bid-Ask).
-- Market monitoring with real-time volatility calculation.
-- Integration with Meteora DLMM SDK and APIs.
-- Notifications and alerts for status updates and errors.
-- Performance reporting and metrics storage.
+- **Multiple Liquidity Strategies**:
+  - Single-Sided SOL (BidAskImBalanced) for asymmetric exposure
+  - Balanced Spot Strategy for market making
+  - Automatic strategy selection based on market conditions
+
+- **Advanced Risk Management**:
+  - Circuit breakers for drawdown protection (15% threshold)
+  - Position value tracking with real-time valuation
+  - Volume monitoring with 6-hour moving average
+  - Emergency exit protocols for market disruptions
+
+- **Multi-Pool Support**:
+  - Cross-pool position discovery and initialization
+  - Unified position data handling
+  - Automated fee claiming and compounding
+
+- **Order Management System**:
+  - Limit, Take Profit, and Stop Loss orders
+  - Atomic multi-order execution
+  - 60-second price monitoring interval
+
+- **Performance Analytics**:
+  - Fee APY calculations
+  - Position P&L tracking
+  - Impermanent loss monitoring
+  - Exposure management across pools
+
+- **Jupiter Price Integration**:
+  - Real-time token price data
+  - Multi-token batch requests
+  - USD value calculation
+
+## Implementation Status
+
+| Component | Status | Description |
+|-----------|--------|-------------|
+| Order Management | ✅ Complete | Full order execution with limit/TP/SL |
+| Position Creation | ✅ Complete | Creation with proper strategy implementation |
+| Risk Management | ✅ Complete | Circuit breakers, drawdown detection |
+| Auto-Compounding | ✅ Complete | Automated fee claiming and reinvestment |
+| Market Selection | ✅ Complete | API for market discovery and filtering |
+| Position Tracking | ✅ Complete | Performance monitoring and valuation |
+| Delegation System | 🛠 Partial | Basic structure implemented, needs completion |
+| Volatility Response | ❌ Planned | Not yet implemented (Priority 5) |
+| Token Vetting | 🛠 Partial | Basic confidence scoring (Priority 4) |
+| Alerting System | ❌ Planned | Not yet implemented (Priority 1) |
 
 ## Requirements
 
-- Node.js and npm
-- AWS account for deployment and resource provisioning
-- Access to Meteora DLMM SDK and API keys
+- Node.js 16+ and npm
+- Solana CLI tools
+- Access to RPC node (preferably dedicated)
+- Wallet with sufficient SOL for transactions
 
 ## Setup
 
@@ -39,60 +80,3 @@ npm install
 Create a `.env` file in the root directory:
 
 ```
-METEORA_API_KEY=your_meteora_api_key
-WALLET_PRIVATE_KEY=your_wallet_private_key
-EMAIL_USERNAME=your_email_username
-EMAIL_PASSWORD=your_email_password
-```
-
-### 4. Update configuration
-
-Edit `config/default.json` to set your desired settings, such as strategies, thresholds, and email recipients.
-
-### 5. Build the project
-
-```bash
-npm run build
-```
-
-### 6. Run tests (optional)
-
-```bash
-npm test
-```
-
-### 7. Run the bot
-
-```bash
-npm start
-```
-
-## Deployment
-
-### Deploy to AWS
-
-Use the provided deployment script to deploy the bot to AWS Lambda.
-
-```bash
-npm run deploy
-```
-
-Ensure you have configured AWS credentials and have the necessary IAM roles and permissions.
-
-## Security Considerations
-
-- **Wallet Management**: Make sure your wallet private keys are securely stored and not exposed.
-- **API Keys**: Do not commit your API keys to version control.
-- **AWS Secrets Manager**: Consider using AWS Secrets Manager for handling sensitive information.
-
-## Contribution
-
-Contributions are welcome. Please submit a pull request or open an issue for any features or bug fixes.
-
-## License
-
-This project is licensed under the MIT License.
-
-## Disclaimer
-
-This bot is intended for educational purposes. Use it at your own risk. The developers are not responsible for any financial losses.
