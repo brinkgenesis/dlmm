@@ -28,9 +28,16 @@ app.use(bodyParser.json());
 
 // Add CORS configuration
 app.use(cors({
-  origin: 'http://localhost:8080', // Your client's URL
+  origin: function(origin, callback) {
+    const allowedOrigins = ['http://localhost:8080', 'http://localhost:3000'];
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
 // Set up rate limiting
