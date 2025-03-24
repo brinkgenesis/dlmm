@@ -3,6 +3,150 @@ import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// Token information interfaces
+interface TokenInfo {
+  address: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  logoURI?: string;
+  tags?: string[];
+  extensions?: Record<string, any>;
+  chainId?: number;
+  coingeckoId?: string;
+}
+
+interface TokenResponse {
+  address: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  logoURI?: string;
+  tags?: string[];
+  extensions?: Record<string, any>;
+  // Other fields that Jupiter API might return
+}
+
+/**
+ * Fetches token information for a single token from Jupiter
+ * @param mintAddress - Token mint address
+ * @returns Token information including symbol, name, etc.
+ */
+export async function getTokenInfo(mintAddress: string): Promise<TokenInfo | null> {
+  try {
+    // Use the Jupiter Token API endpoint
+    const endpoint = `https://api.jup.ag/tokens/v1/token/${mintAddress}`;
+    
+    const response = await axios.get(endpoint, {
+      timeout: 10000, // 10 second timeout
+    });
+    
+    if (response.data) {
+      const tokenData: TokenResponse = response.data;
+      return {
+        address: tokenData.address,
+        symbol: tokenData.symbol,
+        name: tokenData.name,
+        decimals: tokenData.decimals,
+        logoURI: tokenData.logoURI,
+        tags: tokenData.tags,
+        extensions: tokenData.extensions,
+      };
+    }
+    
+    console.warn(`No token info found for: ${mintAddress}`);
+    return null;
+  } catch (error) {
+    console.error(`Error fetching token info for ${mintAddress}:`, 
+      error instanceof Error ? error.message : String(error));
+    return null;
+  }
+}
+
+/**
+ * Fetches token information for multiple tokens from Jupiter
+ * @param mintAddresses - Array of token mint addresses
+ * @returns Map of mint addresses to their token information
+ */
+export async function getTokensInfo(mintAddresses: string[]): Promise<Record<string, TokenInfo>> {
+  const result: Record<string, TokenInfo> = {};
+  
+  // Fetch information for each token sequentially
+  // Could be optimized with Promise.all for parallel requests if needed
+  for (const mintAddress of mintAddresses) {
+    const tokenInfo = await getTokenInfo(mintAddress);
+    if (tokenInfo) {
+      result[mintAddress] = tokenInfo;
+    }
+  }
+  
+  return result;
+}
+
+/**
+ * Gets token symbols for multiple tokens
+ * @param mintAddresses - Array of token mint addresses
+ * @returns Map of mint addresses to their symbols
+ */
+export async function getTokenSymbols(mintAddresses: string[]): Promise<Record<string, string>> {
+  const tokensInfo = await getTokensInfo(mintAddresses);
+  
+  // Extract just the symbols
+  const symbols: Record<string, string> = {};
+  
+  for (const [mintAddress, info] of Object.entries(tokensInfo)) {
+    symbols[mintAddress] = info.symbol;
+  }
+  
+  return symbols;
+}
+
+/**
+ * Gets token logo URLs for multiple tokens
+ * @param mintAddresses - Array of token mint addresses
+ * @returns Map of mint addresses to their logo URIs
+ */
+export async function getTokenLogos(mintAddresses: string[]): Promise<Record<string, string>> {
+  const tokensInfo = await getTokensInfo(mintAddresses);
+  
+  // Extract just the logo URIs
+  const logos: Record<string, string> = {};
+  
+  for (const [mintAddress, info] of Object.entries(tokensInfo)) {
+    // Only add if logoURI exists
+    if (info.logoURI) {
+      logos[mintAddress] = info.logoURI;
+    }
+  }
+  
+  return logos;
+}
+
+/**
+ * Gets token display information (symbols and logos) for multiple tokens
+ * @param mintAddresses - Array of token mint addresses
+ * @returns Object with symbols and logos maps
+ */
+export async function getTokenDisplayInfo(mintAddresses: string[]): Promise<{
+  symbols: Record<string, string>;
+  logos: Record<string, string>;
+}> {
+  const tokensInfo = await getTokensInfo(mintAddresses);
+  
+  const symbols: Record<string, string> = {};
+  const logos: Record<string, string> = {};
+  
+  for (const [mintAddress, info] of Object.entries(tokensInfo)) {
+    symbols[mintAddress] = info.symbol;
+    
+    if (info.logoURI) {
+      logos[mintAddress] = info.logoURI;
+    }
+  }
+  
+  return { symbols, logos };
+}
+
 // Load token blacklist
 let tokenBlacklist: string[] = [];
 try {

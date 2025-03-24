@@ -77,7 +77,10 @@ app.get('/api/positions', async (req, res) => {
     const dashboard = new Dashboard(tradingApp.getConfig());
     const summary = await dashboard.getPositionsSummary();
     
-    // Return JSON response with positions data
+    // Calculate liquidity allocation percentage
+    const liquidityAllocated = (summary.totalValue / summary.totalCapital) * 100;
+    
+    // Return JSON response with full positions data and calculated fields
     res.json({
       success: true,
       data: {
@@ -87,7 +90,35 @@ app.get('/api/positions', async (req, res) => {
         nearEdge: summary.nearEdge,
         totalValue: summary.totalValue,
         totalChangeValue: summary.totalChangeValue,
-        positions: summary.positions
+        totalPendingFees: summary.totalPendingFees,
+        walletValue: summary.walletValue,
+        totalCapital: summary.totalCapital,
+        liquidityAllocated,
+        positions: summary.positions.map(position => ({
+          ...position,
+          // Keep existing fields including the new symbol fields
+          minBinId: position.minBinId,
+          maxBinId: position.maxBinId,
+          currentPrice: position.currentPrice,       // Price in SOL
+          currentPriceUSD: position.currentPriceUSD, // Price in USD
+          pendingFeesUSD: position.pendingFeesUSD,
+          totalClaimedFeeX: position.totalClaimedFeeX,
+          totalClaimedFeeY: position.totalClaimedFeeY,
+          dailyAPR: position.dailyAPR,
+          startingPositionValue: position.startingPositionValue,
+          currentValue: position.currentValue,
+          // Token identification fields
+          tokenXSymbol: position.tokenXSymbol,  // Human-readable symbol
+          tokenYSymbol: position.tokenYSymbol,  // Human-readable symbol
+          tokenXMint: position.tokenXMint,      // Original mint address
+          tokenYMint: position.tokenYMint,      // Original mint address
+          tokenXLogo: position.tokenXLogo,      // Token X logo URL
+          tokenYLogo: position.tokenYLogo,      // Token Y logo URL
+          // Add per-position liquidity allocation
+          liquidityAllocation: summary.totalValue > 0 
+            ? ((position.currentValue ?? 0) / summary.totalValue) * 100 
+            : 0
+        }))
       }
     });
   } catch (error) {
@@ -104,12 +135,19 @@ app.get('/api/positions/summary', async (_: any, res: any) => {
     const dashboard = new Dashboard(tradingApp.getConfig());
     const summary = await dashboard.getPositionsSummary();
     
+    // Calculate liquidity allocation percentage
+    const liquidityAllocated = (summary.totalValue / summary.totalCapital) * 100;
+    
     // Return just the summary without positions
     const { positions, ...summaryStats } = summary;
     
     res.json({
       success: true,
-      data: summaryStats
+      data: {
+        ...summaryStats,
+        liquidityAllocated,
+        totalPendingFees: summary.totalPendingFees
+      }
     });
   } catch (error) {
     console.error('Error fetching position summary:', error);
@@ -143,7 +181,19 @@ app.get('/api/markets', async (req, res) => {
       name: market.name,
       risk: market.risk || 'Unknown',
       fee: market.baseFee || 'N/A',
-      dailyAPR: market.dailyAPR || 'N/A'
+      dailyAPR: market.dailyAPR || 'N/A',
+      tvl: market.tvl || 0,
+      volumeTvlRatio: market.volumeTvlRatio || 0,
+      
+      // Token X information
+      tokenXMint: market.tokenXMint || '',
+      tokenXSymbol: market.tokenXSymbol || '',
+      tokenXLogo: market.tokenXLogo || '',
+      
+      // Token Y information
+      tokenYMint: market.tokenYMint || '',
+      tokenYSymbol: market.tokenYSymbol || '',
+      tokenYLogo: market.tokenYLogo || ''
     }));
     
     res.json({ success: true, markets });

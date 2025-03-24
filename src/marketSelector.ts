@@ -25,6 +25,12 @@ interface MarketInfo {
   tvl?: number; 
   volumeTvlRatio?: number;
   risk?: string;
+  tokenXLogo?: string;
+  tokenYLogo?: string;
+  tokenXMint?: string;
+  tokenYMint?: string;
+  tokenXSymbol?: string;
+  tokenYSymbol?: string;
 }
 
 export class MarketSelector {

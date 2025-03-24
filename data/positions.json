@@ -1,16 +1,9 @@
 {
   "G1G9e8Xmo9yNZxu6uygj5gAS5r4WzHNPNjEKL3Y1CeHe": {
-    "originalActiveBin": -88,
+    "originalActiveBin": -40,
     "minBinId": -89,
     "maxBinId": -20,
-    "snapshotPositionValue": 0.9148177164710586,
+    "snapshotPositionValue": 1.4878194686879183,
     "startingPositionValue": 0.9057656940065226
-  },
-  "HZErmEhFdPtEv8miyRNJ6YYDCJVTUDQ8vb6b9gYV1pAY": {
-    "originalActiveBin": -200,
-    "minBinId": -216,
-    "maxBinId": -147,
-    "snapshotPositionValue": 0.38238287160235807,
-    "startingPositionValue": 0.31880977185309595
   }
 }

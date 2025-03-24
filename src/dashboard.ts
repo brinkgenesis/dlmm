@@ -15,7 +15,10 @@ import {
   getTokenPricesJupiter, 
   getTokenPriceJupiter, 
   tokenAmountToUsd, 
-  usdToTokenAmount 
+  usdToTokenAmount,
+  getTokenSymbols,
+  getTokenLogos,
+  getTokenDisplayInfo
 } from './utils/fetchPriceJupiter';
 import { withSafeKeypair } from './utils/walletHelper';
 
@@ -36,6 +39,7 @@ export interface PositionData {
   lastUpdated?: string;
   pendingFees?: number;
   currentPrice?: number;
+  currentPriceUSD?: number;
   tokenXAmount?: number;
   tokenYAmount?: number;
   tokenXValue?: number;
@@ -51,6 +55,10 @@ export interface PositionData {
   dailyAPR?: number;
   lastFeeUpdate?: number;
   startingPositionValue?: number;
+  tokenXMint?: string;
+  tokenYMint?: string;
+  tokenXLogo?: string;
+  tokenYLogo?: string;
 }
 
 interface StoredPositionData {
@@ -150,6 +158,10 @@ export class Dashboard {
               const activeBin = await dlmm.getActiveBin();
               const pricePerToken = Number(activeBin.pricePerToken);
               
+              // Set both price values
+              positionData.currentPrice = pricePerToken;
+              positionData.currentPriceUSD = pricePerToken * solPrice;
+              
               // X value in USD = X amount * price per token * SOL price in USD
               xValue = totalXAmount * pricePerToken * solPrice;
               // Y value in USD = Y amount * SOL price in USD
@@ -159,6 +171,10 @@ export class Dashboard {
               // X is SOL
               const activeBin = await dlmm.getActiveBin();
               const pricePerToken = Number(activeBin.pricePerToken);
+              
+              // Set both price values
+              positionData.currentPrice = pricePerToken;
+              positionData.currentPriceUSD = pricePerToken * solPrice;
               
               // X value in USD = X amount * SOL price in USD
               xValue = totalXAmount * solPrice;
@@ -344,6 +360,42 @@ export class Dashboard {
           }
           
           enrichedPositions.push(positionData);
+        }
+      }
+      
+      // Before returning the positions, fetch token symbols and logos
+      // Collect all unique mint addresses from positions
+      const mintAddresses = new Set<string>();
+      for (const position of enrichedPositions) {
+        if (position.tokenXSymbol) mintAddresses.add(position.tokenXSymbol);
+        if (position.tokenYSymbol) mintAddresses.add(position.tokenYSymbol);
+      }
+      
+      // Fetch token symbols and logos for all mint addresses
+      const mintArray = Array.from(mintAddresses);
+      console.log(`Fetching symbols and logos for ${mintArray.length} tokens...`);
+      const { symbols: tokenSymbols, logos: tokenLogos } = await getTokenDisplayInfo(mintArray);
+      
+      // Update position data with token symbols and logos
+      for (const position of enrichedPositions) {
+        // Store the mint addresses for reference
+        position.tokenXMint = position.tokenXSymbol;
+        position.tokenYMint = position.tokenYSymbol;
+        
+        // Update with symbols if available
+        if (position.tokenXMint && tokenSymbols[position.tokenXMint]) {
+          position.tokenXSymbol = tokenSymbols[position.tokenXMint];
+        }
+        if (position.tokenYMint && tokenSymbols[position.tokenYMint]) {
+          position.tokenYSymbol = tokenSymbols[position.tokenYMint];
+        }
+        
+        // Add logo URLs if available
+        if (position.tokenXMint && tokenLogos[position.tokenXMint]) {
+          position.tokenXLogo = tokenLogos[position.tokenXMint];
+        }
+        if (position.tokenYMint && tokenLogos[position.tokenYMint]) {
+          position.tokenYLogo = tokenLogos[position.tokenYMint];
         }
       }
       
