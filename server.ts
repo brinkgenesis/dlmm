@@ -176,6 +176,10 @@ app.post('/api/emergency/close-all-positions', async (req, res) => {
 app.get('/api/markets', async (req, res) => {
   try {
     const marketSelector = tradingApp.getMarketSelector();
+    
+    // Get wallet information including SOL balance
+    const walletInfo = await marketSelector.getWalletInfo();
+    
     const markets = marketSelector.markets.map(market => ({
       id: market.publicKey, // publicKey is the pool address
       name: market.name,
@@ -196,7 +200,15 @@ app.get('/api/markets', async (req, res) => {
       tokenYLogo: market.tokenYLogo || ''
     }));
     
-    res.json({ success: true, markets });
+    // Include wallet information in the response
+    res.json({ 
+      success: true, 
+      markets,
+      wallet: {
+        solBalance: walletInfo.solBalance,
+        solValue: walletInfo.solValue
+      }
+    });
   } catch (error) {
     console.error('Error fetching markets:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch markets' });
@@ -205,7 +217,7 @@ app.get('/api/markets', async (req, res) => {
 
 app.post('/api/markets/select', async (req, res) => {
   try {
-    const { poolAddress, singleSidedX } = req.body;
+    const { poolAddress, singleSidedX, dollarAmount } = req.body;
     if (!poolAddress) {
       res.status(400).json({ success: false, error: 'Pool address is required' });
       return;
@@ -228,17 +240,22 @@ app.post('/api/markets/select', async (req, res) => {
     
     // Use the existing methods in sequence
     const dlmm = await marketSelector.initializeSelectedMarket(chosenMarket);
+    
+    // Pass the dollarAmount parameter to createPositionInSelectedMarket
+    // If not provided, it will use the default value in the method
     await marketSelector.createPositionInSelectedMarket(
       dlmm, 
       chosenMarket, 
-      singleSidedX === undefined ? true : singleSidedX
+      singleSidedX === undefined ? true : singleSidedX,
+      dollarAmount // Pass the user-specified dollar amount
     );
     
     res.json({ 
       success: true, 
       message: `Position created successfully in ${chosenMarket.name}`,
       market: chosenMarket.name,
-      side: singleSidedX ? 'Token X' : 'Token Y'
+      side: singleSidedX ? 'Token X' : 'Token Y',
+      amount: `$${dollarAmount || chosenMarket.defaultDollarAmount || 1}`
     });
   } catch (error) {
     console.error('Error creating position in market:', error);

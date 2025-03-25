@@ -161,14 +161,17 @@ export class MarketSelector {
   public async createPositionInSelectedMarket(
     dlmm: DLMM,
     chosenMarket: MarketInfo,
-    singleSidedX: boolean
+    singleSidedX: boolean,
+    userDollarAmount?: number
   ): Promise<void> {
     try {
-      // Use defaultDollarAmount if present, or prompt the user
+      // Use user-provided amount if present, otherwise use default or fall back to 1
       const dollarAmount = 
-        chosenMarket.defaultDollarAmount !== undefined
-          ? chosenMarket.defaultDollarAmount
-          : 1; // fallback
+        userDollarAmount !== undefined
+          ? userDollarAmount
+          : (chosenMarket.defaultDollarAmount !== undefined
+              ? chosenMarket.defaultDollarAmount
+              : 1); // fallback
       
       console.log(`Creating position in ${chosenMarket.name} with $${dollarAmount}`);
       
@@ -238,33 +241,25 @@ export class MarketSelector {
         // Wait a moment for the transaction to be fully processed
         console.log('Waiting for transaction to be confirmed...');
         await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // Refresh token balances after swap
-        const updatedBalances = await this.getTokenBalances();
-        const newBalance = updatedBalances[targetTokenMint.toString()]?.balance || 0;
-        console.log(`Updated ${singleSidedX ? 'X' : 'Y'} token balance: ${newBalance.toFixed(6)} ($ ${(newBalance * targetTokenPrice).toFixed(2)})`);
       }
       
-      // Refresh prices again to be safe
-      const updatedPrices = await getTokenPricesJupiter([targetTokenMint.toString()]);
-      const tokenPrice = updatedPrices[targetTokenMint.toString()] || targetTokenPrice;
-      
-      console.log(`Token price: $${tokenPrice}`);
-      
-      // Get token decimals 
+      // After getting updated token balances
+      const updatedBalances = await this.getTokenBalances();
+      const newBalance = updatedBalances[targetTokenMint.toString()]?.balance || 0;
+      console.log(`Updated ${singleSidedX ? 'X' : 'Y'} token balance: ${newBalance.toFixed(6)} ($ ${(newBalance * targetTokenPrice).toFixed(2)})`);
+
+      // MODIFY THIS PART: Use actual balance with safety margin instead of dollar amount conversion
+      // Calculate token amount as a percentage of actual available balance (use 97% of what's available)
+      const safetyFactor = 0.97; // Use only 97% of available balance to account for fees/fluctuations
+      const tokenAmount = newBalance * safetyFactor;
+
+      // Convert to lamports
       const tokenDecimals = await getTokenDecimals(this.connection, targetTokenMint);
       console.log(`Token decimals: ${tokenDecimals}`);
-      
-      // Calculate token amount from dollar amount (with 1% buffer to account for slippage)
-      const tokenAmount = (dollarAmount * 0.99) / tokenPrice;
-      
-      // Convert to lamports (multiply by 10^decimals)
       const tokenAmountLamports = Math.floor(tokenAmount * Math.pow(10, tokenDecimals));
-      
-      // Convert to BN
       const tokenAmountBN = new BN(tokenAmountLamports.toString());
-      
-      console.log(`Converting $${dollarAmount} to ${tokenAmount} tokens (${tokenAmountLamports} lamports)`);
+
+      console.log(`Using ${tokenAmount.toFixed(6)} tokens (${tokenAmountLamports} lamports) for position creation`);
       
       // Call your existing createSingleSidePosition function with withSafeKeypair
       await withSafeKeypair(this.config, async (keypair) => {
@@ -283,6 +278,18 @@ export class MarketSelector {
       console.error(`Error creating position in ${chosenMarket.name}:`, error);
       throw error;
     }
+  }
+
+  public async getWalletInfo() {
+    const balances = await this.getTokenBalances();
+    const SOL_MINT = 'So11111111111111111111111111111111111111112';
+    
+    return {
+      solBalance: balances[SOL_MINT]?.balance || 0,
+      solValue: balances[SOL_MINT]?.value || 0,
+      // You could include other tokens here if needed
+      balances
+    };
   }
 }
 

@@ -79,7 +79,7 @@ export class Dashboard {
   constructor(config: Config) {
     this.config = config;
     this.connection = config.connection;
-    this.positionsPath = path.join(process.cwd(), 'positions.json');
+    this.positionsPath = path.join(process.cwd(), 'data', 'positions.json');
     this.positionStorage = new PositionStorage(config);
   }
 
@@ -106,9 +106,13 @@ export class Dashboard {
       
       // Load positions.json for additional data
       let storedPositions: {[key: string]: StoredPositionData} = {};
+      console.log(`Loading positions from: ${this.positionsPath}`);
       if (fs.existsSync(this.positionsPath)) {
+        console.log(`File exists with size: ${fs.statSync(this.positionsPath).size} bytes`);
         const positionsJson = fs.readFileSync(this.positionsPath, 'utf-8');
         storedPositions = JSON.parse(positionsJson);
+      } else {
+        console.error(`File does not exist: ${this.positionsPath}`);
       }
       
       // Create array of enriched position data
@@ -118,11 +122,13 @@ export class Dashboard {
       for (const [poolAddress, position] of positionsMap.entries()) {
         // For each position in this pool
         for (const lbPosition of position.lbPairPositionsData) {
-          const positionKey = lbPosition.publicKey.toString();
+          const positionKey = lbPosition.publicKey.toBase58();
           const posData = lbPosition.positionData;
           
           // Try to get stored data
           const storedPosition = storedPositions[positionKey];
+          console.log(`Position ${positionKey}: Found in storage: ${!!storedPosition}`, 
+            storedPosition ? `startingPositionValue: ${storedPosition.startingPositionValue}` : '');
           
           // Create position data object
           const positionData: PositionData = {
