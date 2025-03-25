@@ -59,6 +59,8 @@ export interface PositionData {
   tokenYMint?: string;
   tokenXLogo?: string;
   tokenYLogo?: string;
+  rebalanceCount?: number;
+  positionAge?: number;
 }
 
 interface StoredPositionData {
@@ -67,6 +69,9 @@ interface StoredPositionData {
   maxBinId: number;
   snapshotPositionValue: number;
   startingPositionValue?: number;
+  originalStartDate?: number;
+  rebalanceCount?: number;
+  previousPositionKey?: string;
 }
 
 export class Dashboard {
@@ -361,6 +366,12 @@ export class Dashboard {
                 console.error(`Error calculating APR for position ${lbPosition.publicKey.toString()}:`, error);
               }
             }
+
+            // If you want to add rebalance info to the display:
+            positionData.rebalanceCount = storedPosition?.rebalanceCount || 0;
+            positionData.positionAge = storedPosition?.originalStartDate 
+              ? Math.floor((Date.now() - storedPosition.originalStartDate) / (24 * 3600 * 1000))  // age in days
+              : 0;
           } catch (error) {
             console.error(`Error processing on-chain data for position ${positionKey}:`, error);
           }

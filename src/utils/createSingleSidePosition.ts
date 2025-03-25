@@ -12,7 +12,9 @@ export async function createSingleSidePosition(
   wallet: Keypair,
   totalTokenAmount: BN,
   singleSidedX: boolean,
-  positionStorage: PositionStorage
+  positionStorage: PositionStorage,
+  isRebalancing: boolean = false,
+  oldPositionKey?: PublicKey
 ): Promise<{ positionPubKey: PublicKey; minBinId: number; maxBinId: number }> {
   try {
     if (!pool) throw new Error('DLMM Pool is not initialized');
@@ -114,13 +116,28 @@ export async function createSingleSidePosition(
         console.log(`Position value: $${dollarValue.toFixed(2)}`);
         
         // Store position data with Jupiter-based valuation
-        positionStorage.addPosition(positionPubKey, {
-          originalActiveBin,
-          minBinId,
-          maxBinId,
-          snapshotPositionValue: dollarValue,
-          startingPositionValue: dollarValue
-        });
+        if (isRebalancing && oldPositionKey) {
+          // If rebalancing, transfer history from old position
+          positionStorage.transferPositionHistory(
+            oldPositionKey,
+            positionPubKey,
+            {
+              originalActiveBin,
+              minBinId,
+              maxBinId,
+              snapshotPositionValue: dollarValue
+            }
+          );
+        } else {
+          // Normal new position creation with startingPositionValue
+          positionStorage.addPosition(positionPubKey, {
+            originalActiveBin,
+            minBinId,
+            maxBinId,
+            snapshotPositionValue: dollarValue,
+            startingPositionValue: dollarValue // Important: set initial starting value
+          });
+        }
       }
     } catch (error) {
       console.warn(`Error getting token price: ${error instanceof Error ? error.message : String(error)}`);

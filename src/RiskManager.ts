@@ -320,7 +320,7 @@ export class RiskManager {
     return false;
   }
 
-  public async closeAllPositions(): Promise<void> {
+  public async closeAllPositions(isPermanentClosure: boolean = true): Promise<void> {
     const positionsMap = await this.getUserPositions();
     const positions = Array.from(positionsMap.values());
     
@@ -385,9 +385,13 @@ export class RiskManager {
         
         console.log(`Closed position ${position.publicKey.toString()}`);
         
-        // After successful closure, remove the position from storage
-        this.positionStorage.removePosition(position.publicKey);
-        console.log(`Removed position ${position.publicKey.toBase58()} from storage after closing`);
+        // Only remove from storage if this is a permanent closure, not a rebalance
+        if (isPermanentClosure) {
+          this.positionStorage.removePosition(position.publicKey);
+          console.log(`Removed position ${position.publicKey.toBase58()} from storage (permanent closure)`);
+        } else {
+          console.log(`Position ${position.publicKey.toBase58()} closed but history preserved for rebalancing`);
+        }
         
       } catch (error) {
         console.error(`Error closing position ${position.publicKey.toString()}:`, error);

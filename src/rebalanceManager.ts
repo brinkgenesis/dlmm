@@ -200,6 +200,9 @@ export class RebalanceManager {
       const positionKey = lbPosition.publicKey.toString();
       console.log(`Closing position ${positionKey}...`);
       
+      // Declare the new position keypair at the top of the function
+      let newPositionKeypair: Keypair | undefined;
+      
       // Store position data for recreating later
       const storedPosition = this.positionStorage.getPositionRange(lbPosition.publicKey);
       let singleSidedX: boolean;
@@ -208,15 +211,23 @@ export class RebalanceManager {
       const activeBin = await dlmm.getActiveBin();
       const activeBinId = activeBin.binId;
       
+      // Determine new position range based on active bin
+      let newMinBinId: number;
+      let newMaxBinId: number;
+      
       // Determine if we should create X-sided or Y-sided position
       if (storedPosition) {
         // If we have stored position data, use it to determine
         if (activeBinId < storedPosition.minBinId) {
           console.log(`Active bin ${activeBinId} < min bin ${storedPosition.minBinId}, will create X-sided position`);
           singleSidedX = true;
+          newMinBinId = activeBinId;
+          newMaxBinId = activeBinId + 69; // Use same range size
         } else if (activeBinId > storedPosition.maxBinId) {
           console.log(`Active bin ${activeBinId} > max bin ${storedPosition.maxBinId}, will create Y-sided position`);
           singleSidedX = false;
+          newMinBinId = activeBinId - 69; // Use same range size
+          newMaxBinId = activeBinId;
         } else {
           console.log(`Active bin ${activeBinId} is within range [${storedPosition.minBinId}, ${storedPosition.maxBinId}], skipping rebalance`);
           return; // Skip this position as it's in range
@@ -225,6 +236,8 @@ export class RebalanceManager {
         // Default to X-sided if we don't have stored data
         console.log(`No stored position data, defaulting to X-sided position`);
         singleSidedX = true;
+        newMinBinId = activeBinId;
+        newMaxBinId = activeBinId + 69;
       }
       
       // Get token amounts before removing liquidity
@@ -330,10 +343,12 @@ export class RebalanceManager {
           }
           console.log(`Removed position ${positionKey.toString()} from position storage`);
           
+          // Initialize the keypair here
+          newPositionKeypair = Keypair.generate();
+          
           // Create new single-sided position
           if (singleSidedX) {
             // Use the X amount from the position we just closed
-            // Convert to integer by removing decimal part
             const xAmountParts = totalXAmount.toString().split('.');
             const xAmountInteger = xAmountParts[0]; // Just take the integer part
             console.log(`Using integer X amount: ${xAmountInteger}`);
@@ -352,8 +367,37 @@ export class RebalanceManager {
         console.error(`Error closing position ${positionKey}:`, error);
       }
       
-      // After successfully closing the position
-      console.log(`${positionKey} successfully closed`);
+      // Check if we successfully created a new position
+      if (!newPositionKeypair) {
+        console.error('Failed to create new position keypair');
+        return;
+      }
+      
+      // Now newPositionKeypair is in scope and we've confirmed it exists
+      const positionsMap = await this.getUserPositions();
+      const newPosition = positionsMap.get(newPositionKeypair.publicKey.toString());
+      
+      let positionValue = 0;
+      if (newPosition) {
+        positionValue = await this.calculatePositionValue(newPosition);
+        console.log(`New position value: $${positionValue.toFixed(2)}`);
+      } else {
+        console.log('New position not found in user positions, using default value 0');
+      }
+      
+      // Transfer position history from old to new position
+      this.positionStorage.transferPositionHistory(
+        lbPosition.publicKey,
+        newPositionKeypair.publicKey,
+        {
+          originalActiveBin: activeBinId,
+          minBinId: newMinBinId,
+          maxBinId: newMaxBinId,
+          snapshotPositionValue: positionValue
+        }
+      );
+      
+      console.log(`Position history transferred from ${positionKey} to ${newPositionKeypair.publicKey.toString()}`);
       
     } catch (error) {
       console.error(`Error processing position:`, error);

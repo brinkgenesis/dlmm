@@ -49,9 +49,13 @@ export interface PositionData {
   minBinId: number;
   maxBinId: number;
   snapshotPositionValue: number;
-  startingPositionValue?: number; // Add this new field as optional for backward compatibility
-  feeHistory?: FeeSnapshot[];
+  startingPositionValue?: number;
+  dailyAPR?: number;
   lastFeeTimestamp?: number;
+  originalStartDate?: number;
+  rebalanceCount?: number;
+  previousPositionKey?: string;
+  feeHistory?: FeeSnapshot[];
   lastFeeX?: string;
   lastFeeY?: string;
   lastFeesUSD?: number;
@@ -63,7 +67,7 @@ export interface PositionData {
  */
 export class PositionStorage {
   private filePath: string;
-  private positions: PositionsMapping = {};
+  private positions: { [positionPubKey: string]: PositionData } = {};
 
   /**
    * Constructs a new PositionStorage instance.
@@ -362,6 +366,54 @@ export class PositionStorage {
         dailyProjection
       }
     };
+  }
+
+  /**
+   * Transfers position history during rebalance instead of removing old position
+   * @param oldPositionPubKey - Original position being closed
+   * @param newPositionPubKey - New position being created
+   * @param newPositionData - Data for the new position
+   */
+  public transferPositionHistory(
+    oldPositionPubKey: PublicKey,
+    newPositionPubKey: PublicKey,
+    newPositionData: {
+      originalActiveBin: number;
+      minBinId: number;
+      maxBinId: number;
+      snapshotPositionValue: number;
+    }
+  ): void {
+    const oldPositionKey = oldPositionPubKey.toBase58();
+    const oldPosition = this.positions[oldPositionKey];
+    
+    if (!oldPosition) {
+      console.log(`Old position ${oldPositionKey} not found, creating new entry without history`);
+      this.addPosition(newPositionPubKey, newPositionData);
+      return;
+    }
+    
+    // Transfer history to new position
+    const newPositionKey = newPositionPubKey.toBase58();
+    this.positions[newPositionKey] = {
+      ...newPositionData,
+      // Preserve the original starting value
+      startingPositionValue: oldPosition.startingPositionValue,
+      // Preserve or set the original start date
+      originalStartDate: oldPosition.originalStartDate || Date.now(),
+      // Increment rebalance count
+      rebalanceCount: (oldPosition.rebalanceCount || 0) + 1,
+      // Reference to old position for tracking lineage
+      previousPositionKey: oldPositionKey
+    };
+    
+    console.log(`Transferred history from position ${oldPositionKey} to ${newPositionKey}`);
+    console.log(`Starting value preserved: ${oldPosition.startingPositionValue}`);
+    
+    // Remove old position entry
+    delete this.positions[oldPositionKey];
+    
+    this.save();
   }
 }
 
