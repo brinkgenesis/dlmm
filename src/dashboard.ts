@@ -61,6 +61,8 @@ export interface PositionData {
   tokenYLogo?: string;
   rebalanceCount?: number;
   positionAge?: number;
+  originalStartDate?: number;
+  positionAgeFormatted?: string;
 }
 
 interface StoredPositionData {
@@ -81,11 +83,14 @@ export class Dashboard {
   private tokenPrices: Record<string, number> = {};
   private positionStorage: PositionStorage;
 
-  constructor(config: Config) {
+  constructor(
+    config: Config,
+    positionStorage?: PositionStorage
+  ) {
     this.config = config;
     this.connection = config.connection;
     this.positionsPath = path.join(process.cwd(), 'data', 'positions.json');
-    this.positionStorage = new PositionStorage(config);
+    this.positionStorage = positionStorage || new PositionStorage(config);
   }
 
   /**
@@ -305,38 +310,24 @@ export class Dashboard {
             // After we've calculated all the fee data for a position
             if (lbPosition.positionData && positionData.pendingFeesUSD !== undefined) {
               try {
-                // Use the position key, not pool address
-                console.log(`Processing position: ${positionKey}`);
+                // Check if position exists in storage first
+                const existingPosition = this.positionStorage.getPositionRange(lbPosition.publicKey);
                 
-                // Always use current time instead of lastUpdatedAt from Meteora
-                const currentTime = Date.now();
-                
-                // Get any existing data for time comparison
-                const existingData = this.positionStorage.getPositionAPRData(lbPosition.publicKey);
-                if (existingData && existingData.lastUpdated) {
-                  const lastTime = existingData.lastUpdated;
-                  const timeDiffMs = currentTime - lastTime;
-                  const minutesDiff = Math.floor(timeDiffMs / (1000 * 60));
-                  
-                  // Format time difference
-                  let timeDiffString = '';
-                  if (minutesDiff < 60) {
-                    timeDiffString = `${minutesDiff} minute${minutesDiff !== 1 ? 's' : ''}`;
-                  } else {
-                    const hoursDiff = Math.floor(minutesDiff / 60);
-                    const remainingMinutes = minutesDiff % 60;
-                    timeDiffString = `${hoursDiff} hour${hoursDiff !== 1 ? 's' : ''}`;
-                    if (remainingMinutes > 0) {
-                      timeDiffString += ` ${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''}`;
-                    }
-                  }
-                  
-                  console.log(`Time since last update: ${timeDiffString} (${new Date(lastTime).toLocaleString()} → ${new Date(currentTime).toLocaleString()})`);
-                } else {
-                  console.log(`First update for this position at: ${new Date(currentTime).toLocaleString()}`);
+                // If position doesn't exist in storage, add it first
+                if (!existingPosition) {
+                  console.log(`Position ${positionKey} not found in storage, adding it...`);
+                  this.positionStorage.addPosition(lbPosition.publicKey, {
+                    originalActiveBin: positionData.originalActiveBin,
+                    minBinId: positionData.minBinId,
+                    maxBinId: positionData.maxBinId,
+                    snapshotPositionValue: positionData.currentValue || 0,
+                    startingPositionValue: positionData.currentValue || 0,
+                    originalStartDate: Date.now()
+                  });
+                  console.log(`Added position ${positionKey} to storage`);
                 }
                 
-                // Update the position storage with fee data using position public key
+                // Now update fee data (this will be stored because position exists)
                 this.positionStorage.updatePositionFeeData(
                   lbPosition.publicKey,
                   {
@@ -344,12 +335,11 @@ export class Dashboard {
                     feeY: positionData.feeY || "0",
                     feesUSD: positionData.pendingFeesUSD,
                     positionValue: positionData.currentValue || 0,
-                    timestamp: currentTime
+                    timestamp: Date.now()
                   }
                 );
                 
                 console.log(`Updated fee data for position ${positionKey}`);
-                console.log(`Current fees: $${positionData.pendingFeesUSD}`);
 
                 // Get the APR data
                 const aprData = this.positionStorage.getPositionAPRData(lbPosition.publicKey);
@@ -369,9 +359,30 @@ export class Dashboard {
 
             // If you want to add rebalance info to the display:
             positionData.rebalanceCount = storedPosition?.rebalanceCount || 0;
+            positionData.originalStartDate = storedPosition?.originalStartDate || Date.now();
+
+            // Calculate age in days (existing code)
             positionData.positionAge = storedPosition?.originalStartDate 
-              ? Math.floor((Date.now() - storedPosition.originalStartDate) / (24 * 3600 * 1000))  // age in days
+              ? Math.floor((Date.now() - storedPosition.originalStartDate) / (24 * 3600 * 1000))
               : 0;
+
+            // Add formatted age string (new code)
+            if (storedPosition?.originalStartDate) {
+              const ageMs = Date.now() - storedPosition.originalStartDate;
+              const days = Math.floor(ageMs / (24 * 3600 * 1000));
+              const hours = Math.floor((ageMs % (24 * 3600 * 1000)) / (3600 * 1000));
+              const minutes = Math.floor((ageMs % (3600 * 1000)) / (60 * 1000));
+              
+              // Create formatted string
+              let formattedAge = '';
+              if (days > 0) formattedAge += `${days}d `;
+              if (hours > 0 || days > 0) formattedAge += `${hours}h `;
+              formattedAge += `${minutes}m`;
+              
+              positionData.positionAgeFormatted = formattedAge.trim();
+            } else {
+              positionData.positionAgeFormatted = 'New position';
+            }
           } catch (error) {
             console.error(`Error processing on-chain data for position ${positionKey}:`, error);
           }

@@ -1,59 +1,87 @@
 {
+  "CKMaJTmY8XtArMCdYBn16LTLpbdUDo7ur8WD1axcb9N3": {
+    "originalActiveBin": -47,
+    "minBinId": -47,
+    "maxBinId": 22,
+    "snapshotPositionValue": 1.3220779143253847,
+    "startingPositionValue": 1.3220779143253847,
+    "originalStartDate": 1742938658505,
+    "feeHistory": [
+      {
+        "timestamp": 1742939264397,
+        "feesUSD": 0.000074060369545,
+        "positionValue": 1.3220779143253847
+      }
+    ],
+    "lastFeeTimestamp": 1742939264397,
+    "lastFeeX": "200",
+    "lastFeeY": "385",
+    "lastFeesUSD": 0.000074060369545,
+    "lastPositionValue": 1.3220779143253847
+  },
   "D8UxBuyreioGX5611bYMvJ56B8WU9eTGQxNWKARo4Gmr": {
-    "originalActiveBin": -40,
+    "originalActiveBin": -89,
     "minBinId": -89,
     "maxBinId": -20,
-    "snapshotPositionValue": 1.4564130211269852,
-    "startingPositionValue": 1.4564130211269852,
+    "snapshotPositionValue": 1.4683928123326482,
+    "startingPositionValue": 1.4683928123326482,
+    "originalStartDate": 1742938658870,
     "feeHistory": [
       {
-        "timestamp": 1742870468033,
-        "feesUSD": 0.052411474405376,
-        "positionValue": 1.4564130211269852
+        "timestamp": 1742938658871,
+        "feesUSD": 0.076258202124043,
+        "positionValue": 1.4683928123326482
+      },
+      {
+        "timestamp": 1742938662351,
+        "feesUSD": 0.076256634380043,
+        "positionValue": 1.4683928123326482
+      },
+      {
+        "timestamp": 1742938958698,
+        "feesUSD": 0.076235874423734,
+        "positionValue": 1.4683928123326482
+      },
+      {
+        "timestamp": 1742938962992,
+        "feesUSD": 0.076235874423734,
+        "positionValue": 1.4683928123326482
+      },
+      {
+        "timestamp": 1742939258609,
+        "feesUSD": 0.076215503925306,
+        "positionValue": 1.4786612935377716
+      },
+      {
+        "timestamp": 1742939264020,
+        "feesUSD": 0.076215503925306,
+        "positionValue": 1.4683928123326482
       }
     ],
-    "lastFeeTimestamp": 1742870468033,
-    "lastFeeX": "261827",
-    "lastFeeY": "198056",
-    "lastFeesUSD": 0.052411474405376,
-    "lastPositionValue": 1.4564130211269852
+    "lastFeeTimestamp": 1742939264020,
+    "lastFeeX": "391936",
+    "lastFeeY": "275818",
+    "lastFeesUSD": 0.076215503925306,
+    "lastPositionValue": 1.4683928123326482
   },
-  "sYGm7LqhuhR3yodgt1RemRNtPXhkrwgRFGXfKFc8KeM": {
-    "originalActiveBin": -500,
-    "minBinId": -513,
-    "maxBinId": -444,
-    "snapshotPositionValue": 4.091171695363243,
-    "startingPositionValue": 4.091171695363243,
+  "9Qq6rrLvZryayKL6HcJNHwoDmSJBRCCr6TFz8G8v6jZj": {
+    "originalActiveBin": -249,
+    "minBinId": -249,
+    "maxBinId": -180,
+    "snapshotPositionValue": 1.4148432888118643,
+    "startingPositionValue": 1.4148432888118643,
+    "originalStartDate": 1742938659246,
     "feeHistory": [
       {
-        "timestamp": 1742870468269,
-        "feesUSD": 0.001902963164344,
-        "positionValue": 4.091171695363243
+        "timestamp": 1742939263545,
+        "feesUSD": 0.043756177653179,
+        "positionValue": 1.4008607177091925
       }
     ],
-    "lastFeeTimestamp": 1742870468269,
-    "lastFeeX": "14870",
-    "lastFeeY": "8139",
-    "lastFeesUSD": 0.001902963164344,
-    "lastPositionValue": 4.091171695363243
-  },
-  "FSkUuQGAUuedY7rvXtgPokBdjHjfCUvWHe9pvXfHQwNB": {
-    "originalActiveBin": -275,
-    "minBinId": -274,
-    "maxBinId": -205,
-    "snapshotPositionValue": 5.1803036400190825,
-    "startingPositionValue": 5.1803036400190825,
-    "feeHistory": [
-      {
-        "timestamp": 1742870467850,
-        "feesUSD": 0.00002876001424,
-        "positionValue": 5.1803036400190825
-      }
-    ],
-    "lastFeeTimestamp": 1742870467850,
-    "lastFeeX": "3152",
-    "lastFeeY": "0",
-    "lastFeesUSD": 0.00002876001424,
-    "lastPositionValue": 5.1803036400190825
+    "lastFeeTimestamp": 1742939263545,
+    "lastFeeX": "1587514",
+    "lastFeeY": "170387",
+    "lastFeesUSD": 0.043756177653179,
+    "lastPositionValue": 1.4008607177091925
   }
 }

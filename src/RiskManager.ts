@@ -30,9 +30,11 @@ export class RiskManager {
   constructor(
     private connection: Connection,
     private wallet: Keypair,
-    private config: Config
+    private config: Config,
+    positionStorage?: PositionStorage
   ) {
-    this.positionStorage = new PositionStorage(config);
+    // Use provided storage or create new one
+    this.positionStorage = positionStorage || new PositionStorage(config);
   }
 
   /**

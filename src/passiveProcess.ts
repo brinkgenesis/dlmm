@@ -5,16 +5,23 @@ import { AutoCompounder } from './autoCompounder';
 import { Config } from './models/Config';
 import { sendAndConfirmTransaction } from '@solana/web3.js';
 import { withSafeKeypair } from './utils/walletHelper';
+import { PositionStorage } from './utils/PositionStorage';
+import path from 'path';
 
 export class PassiveProcessManager {
   private intervalIds: NodeJS.Timeout[] = [];
   private initializedPools: DLMM[] = [];
   public config!: Config;
+  public positionStorage: PositionStorage;
   
   constructor(
     private connection: Connection,
-    private wallet: Keypair
+    private wallet: Keypair,
+    config: Config,
+    positionStorage?: PositionStorage
   ) {
+    this.config = config;
+    this.positionStorage = positionStorage || new PositionStorage(config);
   }
 
   public async startAll() {
@@ -75,7 +82,8 @@ export class PassiveProcessManager {
           this.connection,
           pool,
           this.wallet,
-          this.config
+          this.config,
+          this.positionStorage
         );
         await compounder.autoCompound();
       }

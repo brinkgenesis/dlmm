@@ -15,9 +15,10 @@ export class AutoCompounder {
     private connection: Connection,
     private pool: DLMM,
     private wallet: Keypair,
-    private config: Config
+    private config: Config,
+    positionStorage?: PositionStorage
   ) {
-    this.positionStorage = new PositionStorage(config);
+    this.positionStorage = positionStorage || new PositionStorage(config);
   }
 
   public async autoCompound() {

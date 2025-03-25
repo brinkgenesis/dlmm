@@ -15,7 +15,7 @@ export class TradingApp {
   private passiveManager?: PassiveProcessManager;
   private orderManagers = new Map<string, OrderManager>(); // Map of poolAddress to OrderManager
   private config: Config;
-  private positionStorage!: PositionStorage;
+  private positionStorage: PositionStorage;
   private riskManager!: RiskManager;
   private rebalanceManager!: RebalanceManager;
   private riskMonitoringInterval?: NodeJS.Timeout;
@@ -33,15 +33,16 @@ export class TradingApp {
     this.config = config;
     console.log('Config loaded successfully');
     
+    // Initialize once
     this.positionStorage = new PositionStorage(this.config);
     console.log('Position storage initialized');
     
     // Initialize global risk manager with the updated parameters
-    this.riskManager = new RiskManager(this.connection, this.wallet, this.config);
+    this.riskManager = new RiskManager(this.connection, this.wallet, this.config, this.positionStorage);
     console.log('Risk manager initialized');
     
     // Initialize rebalance manager
-    this.rebalanceManager = new RebalanceManager(this.connection, this.wallet, this.config);
+    this.rebalanceManager = new RebalanceManager(this.connection, this.wallet, this.config, this.positionStorage);
     console.log('Rebalance manager initialized');
 
     // Initialize market selector
@@ -75,7 +76,9 @@ export class TradingApp {
     
     this.passiveManager = new PassiveProcessManager(
       this.connection,
-      this.wallet
+      this.wallet,
+      this.config,
+      this.positionStorage
     );
     console.log('Passive process manager created');
     
@@ -147,14 +150,23 @@ export class TradingApp {
       console.log('Cleared existing rebalance monitoring interval');
     }
     
-    // Run an initial check
-    this.rebalanceManager.checkAndRebalancePositions();
+    // Add debug log before initial check
+    console.log('Running initial rebalance check...');
     
-    // Start periodic monitoring
+    // Run an initial check
+    try {
+      this.rebalanceManager.checkAndRebalancePositions();
+      console.log('Initial rebalance check completed');
+    } catch (error) {
+      console.error('Error during initial rebalance check:', error);
+    }
+    
+    // Start periodic monitoring with additional logging
     this.rebalanceInterval = setInterval(() => {
       try {
         console.log('Running scheduled rebalance check...');
         this.rebalanceManager.checkAndRebalancePositions();
+        console.log('Scheduled rebalance check completed at', new Date().toISOString());
       } catch (error) {
         console.error('Rebalance monitoring error:', error);
       }
@@ -377,5 +389,25 @@ export class TradingApp {
     
     const app = new TradingApp(connection, serverWallet, config);
     return app;
+  }
+
+  // Add a getter
+  public getPositionStorage(): PositionStorage {
+    return this.positionStorage;
+  }
+
+  /**
+   * Triggers a manual rebalance check
+   * Provides public access to the private rebalanceManager
+   */
+  public async triggerRebalanceCheck(): Promise<void> {
+    console.log('Manual rebalance check triggered');
+    try {
+      await this.rebalanceManager.checkAndRebalancePositions();
+      console.log('Manual rebalance check completed successfully');
+    } catch (error) {
+      console.error('Error during manual rebalance check:', error);
+      throw error; // Re-throw to let the caller handle it
+    }
   }
 } 

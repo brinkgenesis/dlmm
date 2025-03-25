@@ -124,7 +124,9 @@ export class PositionStorage {
       minBinId: number;
       maxBinId: number;
       snapshotPositionValue: number;
-      startingPositionValue?: number; // New optional parameter
+      startingPositionValue?: number;
+      originalStartDate?: number;
+      rebalanceCount?: number;
     }
   ): void {
     const positionId = positionKey.toString();

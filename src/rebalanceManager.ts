@@ -5,6 +5,7 @@ import DLMM, { PositionInfo, PositionData, LbPosition, StrategyType, StrategyPar
 import BN from 'bn.js';
 import { FetchPrice } from './utils/fetch_price';
 import { withSafeKeypair } from './utils/walletHelper';
+import fs from 'fs';
 
 export class RebalanceManager {
   private connection: Connection;
@@ -15,11 +16,16 @@ export class RebalanceManager {
   private COOLDOWN_PERIOD = .25 * 60 * 60 * 1000; // 1.5 hours in milliseconds
   private dlmmInstances: Map<string, DLMM> = new Map();
 
-  constructor(connection: Connection, wallet: Keypair, config: Config) {
+  constructor(
+    connection: Connection,
+    wallet: Keypair,
+    config: Config,
+    positionStorage?: PositionStorage
+  ) {
     this.connection = connection;
     this.wallet = wallet;
     this.config = config;
-    this.positionStorage = new PositionStorage(config);
+    this.positionStorage = positionStorage || new PositionStorage(config);
   }
 
   /**
@@ -139,6 +145,9 @@ export class RebalanceManager {
               console.log(`Position ${positionKey} - Min: ${storedPosition.minBinId}, Max: ${storedPosition.maxBinId}`);
               
               // Check if active bin is outside position range
+              console.log(`Checking if bin ${activeBinId} is outside range [${storedPosition.minBinId}, ${storedPosition.maxBinId}]`);
+              console.log(`Condition check: ${activeBinId < storedPosition.minBinId || activeBinId > storedPosition.maxBinId}`);
+              
               if (activeBinId < storedPosition.minBinId || activeBinId > storedPosition.maxBinId) {
                 console.log(`⚠️ Range breach detected for position ${positionKey}`);
                 console.log(`Active bin ${activeBinId} is outside range [${storedPosition.minBinId}, ${storedPosition.maxBinId}]`);
@@ -183,6 +192,10 @@ export class RebalanceManager {
           }
         }
       }
+      
+      // At the end of checkAndRebalancePositions
+      console.log(`Rebalance check completed at ${new Date().toISOString()}`);
+      fs.writeFileSync('./last_rebalance_check.txt', new Date().toISOString());
     } catch (error) {
       console.error('Error checking positions for rebalancing:', error);
     }

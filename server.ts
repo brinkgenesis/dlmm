@@ -29,7 +29,7 @@ app.use(bodyParser.json());
 // Add CORS configuration
 app.use(cors({
   origin: function(origin, callback) {
-    const allowedOrigins = ['http://localhost:8080', 'http://localhost:3000'];
+    const allowedOrigins = ['http://localhost:8080', 'http://localhost:3000','http://localhost:3001'];
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
@@ -74,13 +74,13 @@ app.post('/api/config', async (req, res) => {
 // Dashboard Endpoints
 app.get('/api/positions', async (req, res) => {
   try {
-    const dashboard = new Dashboard(tradingApp.getConfig());
+    const dashboard = new Dashboard(
+      tradingApp.getConfig(), 
+      tradingApp.getPositionStorage()
+    );
     const summary = await dashboard.getPositionsSummary();
     
-    // Calculate liquidity allocation percentage
-    const liquidityAllocated = (summary.totalValue / summary.totalCapital) * 100;
-    
-    // Return JSON response with full positions data and calculated fields
+    // Return JSON response with position data including age information
     res.json({
       success: true,
       data: {
@@ -93,7 +93,7 @@ app.get('/api/positions', async (req, res) => {
         totalPendingFees: summary.totalPendingFees,
         walletValue: summary.walletValue,
         totalCapital: summary.totalCapital,
-        liquidityAllocated,
+        liquidityAllocated: (summary.totalValue / summary.totalCapital) * 100,
         positions: summary.positions.map(position => ({
           ...position,
           // Keep existing fields including the new symbol fields
@@ -117,7 +117,11 @@ app.get('/api/positions', async (req, res) => {
           // Add per-position liquidity allocation
           liquidityAllocation: summary.totalValue > 0 
             ? ((position.currentValue ?? 0) / summary.totalValue) * 100 
-            : 0
+            : 0,
+          // Include both raw and formatted age data
+          originalStartDate: position.originalStartDate || null,
+          positionAge: position.positionAge || 0, // Days only (already calculated)
+          positionAgeFormatted: position.positionAgeFormatted || 'New position'
         }))
       }
     });
@@ -434,6 +438,24 @@ app.post('/api/wallet/delegate', async (req, res) => {
       success: false, 
       error: 'Unexpected error during delegation setup',
       details: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
+// Add this endpoint for manual rebalance checks
+app.get('/api/rebalance/check', async (req, res) => {
+  try {
+    console.log("Manual rebalance check triggered from API");
+    await tradingApp.triggerRebalanceCheck();
+    res.json({ 
+      success: true, 
+      message: "Rebalance check completed. Check server logs for details."
+    });
+  } catch (error) {
+    console.error("Error during manual rebalance check:", error);
+    res.status(500).json({ 
+      success: false, 
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
