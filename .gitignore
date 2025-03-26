@@ -106,3 +106,10 @@ Desktop.ini
 # Linux system files
 *~
 
+# New additions from the code block
+/dist
+/build
+/lib
+*.js
+*.js.map
+

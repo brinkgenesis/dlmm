@@ -12,6 +12,7 @@ import jwt from 'jsonwebtoken';
 import { UserConfig } from './frontend/wallet/UserConfig';
 import cors from 'cors'; // Add this import
 import { Config } from './src/models/Config';
+import { OrderRepository } from './src/services/orderRepository';
 dotenv.config();
 
 // Initialize core components
@@ -21,6 +22,7 @@ const wallet = Keypair.fromSecretKey(
 );
 const config = Config.loadSync();
 const tradingApp = new TradingApp(connection, wallet, config);
+const orderRepository = new OrderRepository();
 
 // Express setup
 const app = express();
@@ -49,11 +51,29 @@ app.use('/api/orders', limiter({
 // Order Endpoints
 app.post('/api/orders', async (req, res) => {
   try {
+    // Get user ID from the JWT token
+    const userId = req.user.id; // Implement middleware to extract this
+    
     const { poolAddress, ...orderConfig } = req.body;
-    const orderId = await tradingApp.submitOrder(
+    
+    // Store in Supabase
+    const orderId = await orderRepository.submitOrder(
+      userId,
+      {
+        poolAddress,
+        ...orderConfig
+      }
+    );
+    
+    // Execute the order logic through trading app
+    await tradingApp.submitOrder(
       new PublicKey(poolAddress),
       orderConfig
     );
+    
+    // Update the order status in Supabase
+    await orderRepository.updateOrderStatus(orderId, 'EXECUTED');
+    
     res.json({ success: true, orderId });
   } catch (error) {
     const errorMessage = error instanceof Error 

@@ -42,7 +42,7 @@ interface IQueueElement {
     timeout?: ReturnType<typeof setTimeout>;
 }
 interface IQueue {
-    [x: number]: IQueueElement;
+    [x: number | string]: IQueueElement;
 }
 interface IWSRequestParams {
     [x: string]: any;
@@ -80,7 +80,7 @@ declare class CommonClient extends EventEmitter {
         reconnect?: boolean;
         reconnect_interval?: number;
         max_reconnects?: number;
-    }, generate_request_id?: (method: string, params: object | Array<any>) => number, dataPack?: DataPack<object, string>);
+    }, generate_request_id?: (method: string, params: object | Array<any>) => number | string, dataPack?: DataPack<object, string>);
     /**
    * Connects to a defined server if not connected already.
    * @method
@@ -409,7 +409,7 @@ declare class Server extends EventEmitter {
 declare function createError(code: number, details?: string): IRPCError;
 
 declare class Client extends CommonClient {
-    constructor(address?: string, { autoconnect, reconnect, reconnect_interval, max_reconnects, ...rest_options }?: IWSClientAdditionalOptions & NodeWebSocketTypeOptions, generate_request_id?: (method: string, params: object | Array<any>) => number);
+    constructor(address?: string, { autoconnect, reconnect, reconnect_interval, max_reconnects, ...rest_options }?: IWSClientAdditionalOptions & NodeWebSocketTypeOptions, generate_request_id?: (method: string, params: object | Array<any>) => number | string);
 }
 
 export { type BrowserWebSocketType, Client, CommonClient, type DataPack, DefaultDataPack, type ICommonWebSocket, type ICommonWebSocketFactory, type IQueue, type IWSClientAdditionalOptions, type IWSRequestParams, type NodeWebSocketType, type NodeWebSocketTypeOptions, Server, WebSocket$1 as WebSocket, createError };

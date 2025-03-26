@@ -135,7 +135,7 @@ import { PassiveProcessManager } from './passiveProcess';
     console.log(`Starting Position Manager`);
     
    
-    const passiveManager = new PassiveProcessManager(client.connection, config.walletKeypair);
+    const passiveManager = new PassiveProcessManager(client.connection, config.walletKeypair, config);
     passiveManager.startAll();
   } catch (error: any) {
     if (error instanceof SendTransactionError) {
