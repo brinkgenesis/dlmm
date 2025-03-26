@@ -398,7 +398,13 @@ export class RebalanceManager {
         console.log('New position not found in user positions, using default value 0');
       }
       
-      // Transfer position history from old to new position
+      // Before transfer operation
+      console.log(`REBALANCE: About to transfer history from ${positionKey} to ${newPositionKeypair.publicKey.toString()}`);
+      console.log(`REBALANCE: Original startingPositionValue: ${
+        storedPosition?.startingPositionValue || 'undefined'
+      }`);
+      
+      // Transfer position history
       this.positionStorage.transferPositionHistory(
         lbPosition.publicKey,
         newPositionKeypair.publicKey,
@@ -410,7 +416,8 @@ export class RebalanceManager {
         }
       );
       
-      console.log(`Position history transferred from ${positionKey} to ${newPositionKeypair.publicKey.toString()}`);
+      // After transfer
+      console.log(`REBALANCE: History transfer complete`);
       
     } catch (error) {
       console.error(`Error processing position:`, error);

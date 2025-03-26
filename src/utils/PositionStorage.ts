@@ -146,7 +146,7 @@ export class PositionStorage {
    * @param positionPubKey - The public key of the position.
    * @returns The bin range details or undefined if not found.
    */
-  public getPositionRange(positionPubKey: PublicKey): PositionRange | undefined {
+  public getPositionRange(positionPubKey: PublicKey): PositionData | undefined {
     return this.positions[positionPubKey.toBase58()];
   }
 
@@ -209,7 +209,7 @@ export class PositionStorage {
     }
     
     // Also check for very low fee amounts (another indicator of claiming or reset)
-    const minimumFeeThreshold = 0.05; // $0.05
+    const minimumFeeThreshold = 0.0001; // $0.0001 - reduced from 0.05 to allow low fee positions
     if (feeData.feesUSD < minimumFeeThreshold) {
       console.log(`Low fee amount detected (${feeData.feesUSD.toFixed(4)} < ${minimumFeeThreshold}) - possible fee claim`);
       feeClaimDetected = true;
@@ -217,8 +217,26 @@ export class PositionStorage {
     
     // Reset history if fees were claimed
     if (feeClaimDetected) {
-      console.log(`Resetting fee history for position ${positionKey} due to likely fee claim`);
-      position.feeHistory = [newSnapshot]; // Start fresh
+      // Only reset if this isn't a brand new position (allow at least 1 hour to accumulate fees)
+      const hasExistingHistory = position.feeHistory && position.feeHistory.length > 0;
+      const oldestSnapshot = hasExistingHistory && position.feeHistory ? position.feeHistory[0] : null;
+      const isNewPosition = oldestSnapshot && (feeData.timestamp - oldestSnapshot.timestamp < 60 * 60 * 1000); // 1 hour
+      
+      if (isNewPosition) {
+        console.log(`Low fees detected but position is new (< 1 hour), preserving history`);
+        // Add new snapshot without resetting
+        if (!position.feeHistory) {
+          position.feeHistory = [newSnapshot];
+        } else {
+          position.feeHistory.push(newSnapshot);
+          if (position.feeHistory.length > 24) {
+            position.feeHistory.shift(); // Remove oldest
+          }
+        }
+      } else {
+        console.log(`Resetting fee history for position ${positionKey} due to likely fee claim`);
+        position.feeHistory = [newSnapshot]; // Start fresh
+      }
     } else {
       // Normal update - initialize or update fee history
       if (!position.feeHistory) {
@@ -414,6 +432,14 @@ export class PositionStorage {
     
     // Remove old position entry
     delete this.positions[oldPositionKey];
+    
+    console.log(`HISTORY TRANSFER - Details:
+      Old position: ${oldPositionKey}
+      New position: ${newPositionKey}
+      Starting value: ${oldPosition.startingPositionValue}
+      Original date: ${oldPosition.originalStartDate || Date.now()}
+      Rebalance count: ${(oldPosition.rebalanceCount || 0) + 1}
+    `);
     
     this.save();
   }
