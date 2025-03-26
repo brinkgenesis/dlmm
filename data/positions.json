@@ -1,4 +1,30 @@
 {
+  "A4aHWL7PDsxL3p1xCTMjgfowbbV16yFMvxJHy51d97Dn": {
+    "originalActiveBin": -275,
+    "minBinId": -275,
+    "maxBinId": -206,
+    "snapshotPositionValue": 0,
+    "startingPositionValue": 0,
+    "feeHistory": [
+      {
+        "timestamp": 1743031298141,
+        "feesUSD": 0,
+        "positionValue": 1.0184083371423223
+      }
+    ],
+    "lastFeeTimestamp": 1743031298141,
+    "lastFeeX": "0",
+    "lastFeeY": "0",
+    "lastFeesUSD": 0,
+    "lastPositionValue": 1.0184083371423223
+  },
+  "CG92wQzCR5hASxbEBG87GgHAMFGeoVts1A8gfS5GRmts": {
+    "originalActiveBin": -275,
+    "minBinId": -275,
+    "maxBinId": -206,
+    "snapshotPositionValue": 0,
+    "startingPositionValue": 0
+  },
   "CKMaJTmY8XtArMCdYBn16LTLpbdUDo7ur8WD1axcb9N3": {
     "originalActiveBin": -43,
     "minBinId": -47,
@@ -50,14 +76,24 @@
         "timestamp": 1743023197520,
         "feesUSD": 0.004034493784312,
         "positionValue": 1.2885335202244257
+      },
+      {
+        "timestamp": 1743031238030,
+        "feesUSD": 0.0042909381771405,
+        "positionValue": 1.3078433804890137
+      },
+      {
+        "timestamp": 1743031297792,
+        "feesUSD": 0.0043456610077275,
+        "positionValue": 1.3206462839885638
       }
     ],
-    "lastFeeTimestamp": 1743023197520,
-    "lastFeeX": "21516",
-    "lastFeeY": "15128",
-    "lastFeesUSD": 0.004034493784312,
-    "lastPositionValue": 1.2885335202244257,
-    "dailyAPR": 0.12044386039861692
+    "lastFeeTimestamp": 1743031297792,
+    "lastFeeX": "22128",
+    "lastFeeY": "16815",
+    "lastFeesUSD": 0.0043456610077275,
+    "lastPositionValue": 1.3206462839885638,
+    "dailyAPR": 0.23234596574814664
   },
   "D8UxBuyreioGX5611bYMvJ56B8WU9eTGQxNWKARo4Gmr": {
     "originalActiveBin": -43,
@@ -110,73 +146,23 @@
         "timestamp": 1743023197661,
         "feesUSD": 0.09305606675936,
         "positionValue": 1.424604402672509
+      },
+      {
+        "timestamp": 1743031237863,
+        "feesUSD": 0.094664672511882,
+        "positionValue": 1.4249879867437993
+      },
+      {
+        "timestamp": 1743031297926,
+        "feesUSD": 0.095096538507259,
+        "positionValue": 1.4315410285026142
       }
     ],
-    "lastFeeTimestamp": 1743023197661,
-    "lastFeeX": "496405",
-    "lastFeeY": "348840",
-    "lastFeesUSD": 0.09305606675936,
-    "lastPositionValue": 1.424604402672509,
-    "dailyAPR": 0.45968566468425115
-  },
-  "5F8Fc5PzpzZrMNhhs1EKsDb5fjmfJn3CzmkLHCkBWGH5": {
-    "originalActiveBin": -276,
-    "minBinId": -272,
-    "maxBinId": -203,
-    "snapshotPositionValue": 1.0231623634736964,
-    "startingPositionValue": 1.0231623634736964,
-    "feeHistory": [
-      {
-        "timestamp": 1743021397337,
-        "feesUSD": 0.000283630033676,
-        "positionValue": 1.0231623634736964
-      },
-      {
-        "timestamp": 1743021457953,
-        "feesUSD": 0.000284314440196,
-        "positionValue": 1.0231623634736964
-      },
-      {
-        "timestamp": 1743021697092,
-        "feesUSD": 0.000284798118362,
-        "positionValue": 1.0333939871084334
-      },
-      {
-        "timestamp": 1743021757825,
-        "feesUSD": 0.000284991906826,
-        "positionValue": 1.0333939871084334
-      },
-      {
-        "timestamp": 1743022598108,
-        "feesUSD": 0.00047089727336,
-        "positionValue": 1.0889529066438095
-      },
-      {
-        "timestamp": 1743022657261,
-        "feesUSD": 0.0004704928848,
-        "positionValue": 1.0889529066438095
-      },
-      {
-        "timestamp": 1743022898042,
-        "feesUSD": 0.00047828237544,
-        "positionValue": 1.0782105659389392
-      },
-      {
-        "timestamp": 1743022958319,
-        "feesUSD": 0.00047779831198,
-        "positionValue": 1.0782105659389392
-      },
-      {
-        "timestamp": 1743023197840,
-        "feesUSD": 0.0004938190377,
-        "positionValue": 1.0860807160553512
-      }
-    ],
-    "lastFeeTimestamp": 1743023197840,
-    "lastFeeX": "23393",
-    "lastFeeY": "1970",
-    "lastFeesUSD": 0.0004938190377,
-    "lastPositionValue": 1.0860807160553512,
-    "dailyAPR": 0.9521800904586178
+    "lastFeeTimestamp": 1743031297926,
+    "lastFeeX": "499455",
+    "lastFeeY": "357574",
+    "lastFeesUSD": 0.095096538507259,
+    "lastPositionValue": 1.4315410285026142,
+    "dailyAPR": 1.3361895298774518
   }
 }

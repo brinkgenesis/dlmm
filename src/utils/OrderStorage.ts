@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { PublicKey } from '@solana/web3.js';
+import { OrderRepository } from '../services/orderRepository';
 
 interface StoredOrder {
   orderId: string;
@@ -17,9 +18,12 @@ interface StoredOrder {
 
 export class OrderStorage {
   private filePath: string;
+  private orderRepository: OrderRepository;
+  private supabaseEnabled: boolean = true;
 
   constructor() {
     this.filePath = path.join(__dirname, 'data', 'orders-mainnet.json');
+    this.orderRepository = new OrderRepository();
     console.log('OrderStorage initialized at:', this.filePath);
     this.initializeStorage();
   }
@@ -37,6 +41,24 @@ export class OrderStorage {
     orders[order.orderId] = order;
     console.log('Saving order:', order.orderId);
     await this.saveOrders(orders);
+    
+    // Also save to Supabase if enabled
+    if (this.supabaseEnabled) {
+      try {
+        // Use a default userId since auth is not required yet
+        await this.orderRepository.submitOrder('default-user', {
+          poolAddress: order.poolAddress,
+          orderType: order.config.orderType,
+          triggerPrice: order.config.triggerPrice,
+          sizeUSD: order.config.orderSize,
+          closeBps: order.config.closeBps,
+          side: order.config.side
+        });
+      } catch (error) {
+        console.error('Error saving order to Supabase:', error);
+        // Continue with normal operation
+      }
+    }
   }
 
   public async deleteOrder(orderId: string): Promise<void> {

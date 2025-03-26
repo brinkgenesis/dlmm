@@ -14,6 +14,7 @@ import { swapTokensWithRetry } from './utils/swapTokens';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { getTokenPricesJupiter, getTokenPriceJupiter } from './utils/fetchPriceJupiter';
 import { withSafeKeypair } from './utils/walletHelper';
+import { MarketRepository } from './services/marketRepository';
 
 interface MarketInfo {
   name: string;
@@ -39,6 +40,8 @@ export class MarketSelector {
   private wallet: Keypair;
   private positionStorage: PositionStorage;
   private config: Config;
+  private marketRepository: MarketRepository;
+  private supabaseEnabled: boolean = true;
   
   constructor(
     connection: Connection, 
@@ -56,6 +59,51 @@ export class MarketSelector {
     this.wallet = wallet;
     this.positionStorage = positionStorage;
     this.config = config;
+    this.marketRepository = new MarketRepository();
+    
+    // If Supabase is enabled, try to load markets from there
+    if (this.supabaseEnabled) {
+      this.loadMarketsFromSupabase().catch(error => {
+        console.error('Error loading markets from Supabase:', error);
+      });
+      
+      // Also sync our local markets to Supabase
+      this.marketRepository.syncMarkets(this.markets).catch(error => {
+        console.error('Error syncing markets to Supabase:', error);
+      });
+    }
+  }
+
+  private async loadMarketsFromSupabase(): Promise<void> {
+    try {
+      const markets = await this.marketRepository.getAllMarkets();
+      
+      // Only replace markets if we get data from Supabase
+      if (markets && markets.length > 0) {
+        // Convert from Supabase format to the format expected by MarketSelector
+        this.markets = markets.map(market => ({
+          name: market.name,
+          publicKey: market.public_key,
+          binStep: market.bin_step,
+          baseFee: market.base_fee,
+          dailyAPR: market.daily_apr,
+          tvl: market.tvl,
+          volumeTvlRatio: market.volume_tvl_ratio,
+          risk: market.risk,
+          tokenXMint: market.token_x_mint,
+          tokenYMint: market.token_y_mint,
+          tokenXSymbol: market.token_x_symbol,
+          tokenYSymbol: market.token_y_symbol,
+          tokenXLogo: market.token_x_logo,
+          tokenYLogo: market.token_y_logo
+        }));
+        
+        console.log(`Loaded ${this.markets.length} markets from Supabase`);
+      }
+    } catch (error) {
+      console.error('Error loading markets from Supabase:', error);
+      // Continue with markets from JSON file
+    }
   }
 
   public async promptUserForMarketSelection(): Promise<MarketInfo> {

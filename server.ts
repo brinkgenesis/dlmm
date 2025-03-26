@@ -51,8 +51,8 @@ app.use('/api/orders', limiter({
 // Order Endpoints
 app.post('/api/orders', async (req, res) => {
   try {
-    // Get user ID from the JWT token
-    const userId = req.user.id; // Implement middleware to extract this
+    // Use default user ID since auth is not required yet
+    const userId = 'default-user'; // This replaces req.user.id
     
     const { poolAddress, ...orderConfig } = req.body;
     

@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { PublicKey } from '@solana/web3.js';
 import { Config } from '../models/Config';
+import { PositionRepository } from '../services/positionRepository';
 
 interface PositionRange {
   originalActiveBin: number;
@@ -68,6 +69,8 @@ export interface PositionData {
 export class PositionStorage {
   private filePath: string;
   private positions: { [positionPubKey: string]: PositionData } = {};
+  private positionRepository: PositionRepository;
+  private supabaseEnabled: boolean = true; // Flag to enable/disable Supabase integration
 
   /**
    * Constructs a new PositionStorage instance.
@@ -76,14 +79,16 @@ export class PositionStorage {
    */
   constructor(private config: Config, fileName: string = 'positions.json') {
     this.filePath = path.resolve(this.config.dataDirectory, fileName);
+    this.positionRepository = new PositionRepository();
     this.load();
   }
 
   /**
-   * Loads the positions mapping from the JSON file.
+   * Loads the positions mapping from the JSON file and Supabase.
    */
-  private load(): void {
+  private async load(): Promise<void> {
     try {
+      // First, try to load from local file
       if (fs.existsSync(this.filePath)) {
         const data = fs.readFileSync(this.filePath, 'utf-8');
         this.positions = JSON.parse(data);
@@ -94,6 +99,25 @@ export class PositionStorage {
         fs.writeFileSync(this.filePath, JSON.stringify({}), 'utf-8');
         console.log(`Created new positions file at ${this.filePath}`);
       }
+
+      // Then, if Supabase is enabled, try to load from there and merge
+      if (this.supabaseEnabled) {
+        try {
+          const supabasePositions = await this.positionRepository.loadPositions();
+          
+          // Merge Supabase positions with local positions
+          // Local positions take precedence in case of conflict
+          this.positions = {
+            ...supabasePositions,
+            ...this.positions
+          };
+          
+          console.log(`Merged positions from Supabase with local positions`);
+        } catch (error) {
+          console.error('Error loading positions from Supabase:', error);
+          // Continue with local positions
+        }
+      }
     } catch (error: any) {
       console.error('Error loading positions:', error.message || error);
       this.positions = {};
@@ -101,12 +125,19 @@ export class PositionStorage {
   }
 
   /**
-   * Saves the current positions mapping to the JSON file.
+   * Saves the current positions mapping to the JSON file and Supabase.
    */
   private save(): void {
     try {
+      // Save to local file
       fs.writeFileSync(this.filePath, JSON.stringify(this.positions, null, 2), 'utf-8');
       console.log(`Saved positions to ${this.filePath}`);
+      
+      // If Supabase is enabled, sync data there too
+      if (this.supabaseEnabled) {
+        this.positionRepository.syncAllPositions(this.positions)
+          .catch(error => console.error('Error syncing positions to Supabase:', error));
+      }
     } catch (error: any) {
       console.error('Error saving positions:', error.message || error);
     }
@@ -114,8 +145,8 @@ export class PositionStorage {
 
   /**
    * Adds a new position with its bin ranges.
-   * @param positionPubKey - The public key of the position.
-   * @param range - The bin range details.
+   * @param positionKey - The public key of the position.
+   * @param data - The position data.
    */
   public addPosition(
     positionKey: PublicKey, 
@@ -138,7 +169,7 @@ export class PositionStorage {
     };
     
     this.positions[positionId] = positionData;
-    this.save();
+    this.save(); // This will handle both local save and Supabase sync
   }
 
   /**
@@ -163,7 +194,15 @@ export class PositionStorage {
    * @param positionPubKey - The public key of the position.
    */
   public removePosition(positionPubKey: PublicKey): void {
-    delete this.positions[positionPubKey.toBase58()];
+    const positionKey = positionPubKey.toBase58();
+    delete this.positions[positionKey];
+    
+    // Also remove from Supabase if enabled
+    if (this.supabaseEnabled) {
+      this.positionRepository.removePosition(positionKey)
+        .catch(error => console.error(`Error removing position ${positionKey} from Supabase:`, error));
+    }
+    
     this.save();
   }
 
