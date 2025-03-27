@@ -273,13 +273,13 @@ export class MarketRepository {
       };
       
       if (existingMarket) {
-        // Update existing market
+        // Update existing market (faster)
         await supabase
           .from('markets')
           .update(marketData)
           .eq('id', existingMarket.id);
       } else {
-        // Insert new market
+        // Insert new market (less common over time)
         await supabase
           .from('markets')
           .insert(marketData);
@@ -300,5 +300,27 @@ export class MarketRepository {
     } else {
       return 'High';
     }
+  }
+
+  /**
+   * Update token metadata for a market
+   */
+  async updateMarketTokenMetadata(marketId: string, metadata: {
+    token_x_symbol?: string;
+    token_y_symbol?: string;
+    token_x_logo?: string;
+    token_y_logo?: string;
+  }) {
+    const { error } = await supabase
+      .from('markets')
+      .update(metadata)
+      .eq('id', marketId);
+    
+    if (error) {
+      console.error(`Error updating market token metadata: ${error.message}`);
+      throw error;
+    }
+    
+    return true;
   }
 }

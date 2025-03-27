@@ -4,6 +4,7 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import DLMM, { getTokensMintFromPoolAddress } from '@meteora-ag/dlmm';
 import { getTokenLogos, getTokenSymbols } from './utils/fetchPriceJupiter';
 import * as dotenv from 'dotenv';
+import { MarketRepository } from './services/marketRepository';
 dotenv.config();
 
 // Define an enhanced market info interface
@@ -26,6 +27,19 @@ interface EnhancedMarketInfo {
 
 interface MarketSelectionFile {
   markets: EnhancedMarketInfo[];
+}
+
+// Add an interface for database market type
+interface DbMarket {
+  id: string;
+  name: string;
+  token_x_mint: string;
+  token_y_mint: string;
+  token_x_symbol?: string | null;
+  token_y_symbol?: string | null;
+  token_x_logo?: string | null;
+  token_y_logo?: string | null;
+  // Add other fields as needed
 }
 
 class SelectionIndexer {
@@ -181,6 +195,107 @@ class SelectionIndexer {
     } catch (error) {
       console.error('Error processing markets:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Process only markets with missing token data (faster than full processing)
+   */
+  public async processOnlyMissingTokenData(): Promise<void> {
+    try {
+      // Get markets from Supabase that need token metadata
+      const marketRepository = new MarketRepository();
+      const allMarkets = await marketRepository.getAllMarkets();
+      
+      // Filter markets that need token metadata
+      const marketsWithMissingData = allMarkets.filter((market: DbMarket) => {
+        return (
+          market.token_x_mint && 
+          market.token_y_mint && 
+          (!market.token_x_symbol || !market.token_y_symbol || !market.token_x_logo || !market.token_y_logo)
+        );
+      });
+      
+      if (marketsWithMissingData.length === 0) {
+        console.log('No markets need token metadata. Skipping processing.');
+        return;
+      }
+      
+      console.log(`Processing ${marketsWithMissingData.length} markets with missing token data...`);
+      
+      // Track all mint addresses to batch logo requests
+      const allMints: string[] = [];
+      const mintToMarketMap: Map<string, any[]> = new Map();
+      
+      // Collect all mints that need data
+      for (const market of marketsWithMissingData) {
+        // Add token X mint if metadata is missing
+        if (!market.token_x_symbol || !market.token_x_logo) {
+          if (!allMints.includes(market.token_x_mint)) {
+            allMints.push(market.token_x_mint);
+          }
+          if (!mintToMarketMap.has(market.token_x_mint)) {
+            mintToMarketMap.set(market.token_x_mint, []);
+          }
+          mintToMarketMap.get(market.token_x_mint)!.push(market);
+        }
+        
+        // Add token Y mint if metadata is missing
+        if (!market.token_y_symbol || !market.token_y_logo) {
+          if (!allMints.includes(market.token_y_mint)) {
+            allMints.push(market.token_y_mint);
+          }
+          if (!mintToMarketMap.has(market.token_y_mint)) {
+            mintToMarketMap.set(market.token_y_mint, []);
+          }
+          mintToMarketMap.get(market.token_y_mint)!.push(market);
+        }
+      }
+      
+      // Fetch all logos and symbols in one batch
+      if (allMints.length > 0) {
+        console.log(`Fetching logos and symbols for ${allMints.length} tokens...`);
+        const logos = await getTokenLogos(allMints);
+        const symbols = await getTokenSymbols(allMints);
+        
+        // Update each market with the fetched data
+        for (const [mint, markets] of mintToMarketMap.entries()) {
+          const logo = logos[mint];
+          const symbol = symbols[mint];
+          
+          if (!logo || !symbol) {
+            console.log(`No data found for mint ${mint}`);
+            continue;
+          }
+          
+          // Update markets in Supabase
+          for (const market of markets) {
+            const updates: any = {};
+            
+            if (market.token_x_mint === mint) {
+              if (!market.token_x_logo) updates.token_x_logo = logo;
+              if (!market.token_x_symbol) updates.token_x_symbol = symbol;
+            }
+            
+            if (market.token_y_mint === mint) {
+              if (!market.token_y_logo) updates.token_y_logo = logo;
+              if (!market.token_y_symbol) updates.token_y_symbol = symbol;
+            }
+            
+            if (Object.keys(updates).length > 0) {
+              // Update the market in Supabase
+              await marketRepository.updateMarketTokenMetadata(market.id, updates);
+              console.log(`Updated token metadata for market ${market.name}`);
+            }
+          }
+        }
+        
+        console.log('Token metadata update complete!');
+      } else {
+        console.log('No token metadata needed updating.');
+      }
+    } catch (error) {
+      console.error('Error updating token metadata:', error);
     }
   }
 }

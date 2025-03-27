@@ -208,6 +208,11 @@ app.get('/api/markets', async (req, res) => {
     const marketSelector = tradingApp.getMarketSelector();
     const walletInfo = await marketSelector.getWalletInfo();
     
+    // NEW: Run the SelectionIndexer to ensure token metadata is populated
+    console.log('Running SelectionIndexer to ensure token metadata is available...');
+    const indexer = new SelectionIndexer();
+    await indexer.processOnlyMissingTokenData();
+    
     // Get markets from database (already filtered for better performance)
     const marketsData = await marketRepository.getFilteredMarkets({ limit: 25 });
     
@@ -579,6 +584,11 @@ app.get('/api/markets/filtered', async (req, res) => {
     const minApr = req.query.minApr ? parseFloat(req.query.minApr as string) : undefined;
     const minFeeTvlRatio = req.query.minFeeTvlRatio ? parseFloat(req.query.minFeeTvlRatio as string) : undefined;
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 25;
+    
+    // NEW: Run the SelectionIndexer to ensure token metadata is populated
+    console.log('Running SelectionIndexer to ensure token metadata is available...');
+    const indexer = new SelectionIndexer();
+    await indexer.processOnlyMissingTokenData();
     
     // Get filtered markets
     const markets = await marketRepository.getFilteredMarkets({
