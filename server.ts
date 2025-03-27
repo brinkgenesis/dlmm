@@ -13,6 +13,8 @@ import { UserConfig } from './frontend/wallet/UserConfig';
 import cors from 'cors'; // Add this import
 import { Config } from './src/models/Config';
 import { OrderRepository } from './src/services/orderRepository';
+import { MarketRepository } from './src/services/marketRepository';
+import { SelectionIndexer } from './src/SelectionIndexer';
 dotenv.config();
 
 // Initialize core components
@@ -23,6 +25,7 @@ const wallet = Keypair.fromSecretKey(
 const config = Config.loadSync();
 const tradingApp = new TradingApp(connection, wallet, config);
 const orderRepository = new OrderRepository();
+const marketRepository = new MarketRepository();
 
 // Express setup
 const app = express();
@@ -199,29 +202,67 @@ app.post('/api/emergency/close-all-positions', async (req, res) => {
 // Market Selection Endpoints
 app.get('/api/markets', async (req, res) => {
   try {
-    const marketSelector = tradingApp.getMarketSelector();
+    const marketRepository = new MarketRepository();
     
-    // Get wallet information including SOL balance
+    // You can keep the marketSelector for wallet info
+    const marketSelector = tradingApp.getMarketSelector();
     const walletInfo = await marketSelector.getWalletInfo();
     
-    const markets = marketSelector.markets.map(market => ({
-      id: market.publicKey, // publicKey is the pool address
+    // Get markets from database (already filtered for better performance)
+    const marketsData = await marketRepository.getFilteredMarkets({ limit: 25 });
+    
+    const markets = marketsData.map(market => ({
+      // Basic identification
+      id: market.public_key,
+      address: market.address,
       name: market.name,
       risk: market.risk || 'Unknown',
-      fee: market.baseFee || 'N/A',
-      dailyAPR: market.dailyAPR || 'N/A',
-      tvl: market.tvl || 0,
-      volumeTvlRatio: market.volumeTvlRatio || 0,
       
-      // Token X information
-      tokenXMint: market.tokenXMint || '',
-      tokenXSymbol: market.tokenXSymbol || '',
-      tokenXLogo: market.tokenXLogo || '',
+      // Fee structure
+      fee: market.base_fee || market.base_fee_percentage + '%',
+      baseFeePercentage: market.base_fee_percentage,
+      maxFeePercentage: market.max_fee_percentage,
+      protocolFeePercentage: market.protocol_fee_percentage,
       
-      // Token Y information
-      tokenYMint: market.tokenYMint || '',
-      tokenYSymbol: market.tokenYSymbol || '',
-      tokenYLogo: market.tokenYLogo || ''
+      // Performance metrics
+      dailyAPR: market.apr,
+      apy: market.apy,
+      tvl: parseFloat(market.liquidity),
+      volumeTvlRatio: market.volume_tvl_ratio,
+      volume24h: market.trade_volume_24h,
+      fees24h: market.fees_24h,
+      
+      // Technical details
+      binStep: market.bin_step,
+      currentPrice: market.current_price,
+      isBlacklisted: market.is_blacklisted || false,
+      
+      // Token information
+      tokenXMint: market.token_x_mint || market.mint_x,
+      tokenYMint: market.token_y_mint || market.mint_y,
+      tokenXSymbol: market.token_x_symbol,
+      tokenYSymbol: market.token_y_symbol,
+      tokenXLogo: market.token_x_logo,
+      tokenYLogo: market.token_y_logo,
+      
+      // Reserve information
+      reserveX: market.reserve_x,
+      reserveY: market.reserve_y,
+      reserveXAmount: market.reserve_x_amount,
+      reserveYAmount: market.reserve_y_amount,
+      
+      // Historical data
+      cumulativeTradeVolume: market.cumulative_trade_volume,
+      cumulativeFeeVolume: market.cumulative_fee_volume,
+      
+      // Time-based metrics
+      feesByTimeframe: market.fees_by_timeframe,
+      volumeByTimeframe: market.volume_by_timeframe,
+      feeVolumeRatios: market.fee_volume_ratios,
+      
+      // Metadata
+      tags: market.tags || [],
+      lastUpdated: market.last_updated
     }));
     
     // Include wallet information in the response
@@ -480,10 +521,151 @@ app.get('/api/rebalance/check', async (req, res) => {
   }
 });
 
+// Market fetching endpoint
+app.get('/api/markets/refresh', async (req, res) => {
+  try {
+    // Get optional query parameters and map them correctly
+    const sortKey = req.query.sortKey as string;
+    const orderBy = req.query.orderBy as string;
+    const hideLowTvl = req.query.hideLowTvl ? parseInt(req.query.hideLowTvl as string) : 30000; // Default to 10000
+    const hideLowApr = req.query.hideLowApr === 'true';
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : 25;
+    
+    console.log(`Starting market refresh with parameters: 
+      sortKey: ${sortKey || 'default'}
+      orderBy: ${orderBy || 'default'}
+      hideLowTvl: ${hideLowTvl}
+      hideLowApr: ${hideLowApr}
+      limit: ${limit}
+    `);
+    
+    // Fetch and sync markets from Meteora API
+    const marketRepository = new MarketRepository();
+    const pairs = await marketRepository.fetchAndSyncMeteoraPairs({
+      sortKey: sortKey as any,
+      orderBy: orderBy as any,
+      hideLowTvl,
+      hideLowApr,
+      limit
+    });
+    
+    // After fetching, run the SelectionIndexer to populate missing token metadata
+    console.log('Running SelectionIndexer to populate token metadata...');
+    const indexer = new SelectionIndexer();
+    await indexer.processMarkets();
+    
+    res.json({ 
+      success: true, 
+      message: `Markets refreshed successfully. Synced ${pairs.length} pairs.` 
+    });
+  } catch (error) {
+    console.error('Error refreshing markets:', error);
+    
+    // Send more detailed error message
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+      stack: process.env.NODE_ENV === 'development' && error instanceof Error ? error.stack : undefined
+    });
+  }
+});
+
+// Enhanced markets endpoint with filtering
+app.get('/api/markets/filtered', async (req, res) => {
+  try {
+    // Get filter parameters
+    const minLiquidity = req.query.minLiquidity ? parseFloat(req.query.minLiquidity as string) : undefined;
+    const minVolume = req.query.minVolume ? parseFloat(req.query.minVolume as string) : undefined;
+    const minApr = req.query.minApr ? parseFloat(req.query.minApr as string) : undefined;
+    const minFeeTvlRatio = req.query.minFeeTvlRatio ? parseFloat(req.query.minFeeTvlRatio as string) : undefined;
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : 25;
+    
+    // Get filtered markets
+    const markets = await marketRepository.getFilteredMarkets({
+      minLiquidity,
+      minVolume,
+      minApr,
+      minFeeTvlRatio,
+      limit
+    });
+    
+    res.json({ 
+      success: true, 
+      markets: markets.map(market => ({
+        // Basic identification
+        id: market.public_key,
+        address: market.address,
+        name: market.name,
+        risk: market.risk || 'Unknown',
+        
+        // Fee structure
+        fee: market.base_fee || market.base_fee_percentage + '%',
+        baseFeePercentage: market.base_fee_percentage,
+        maxFeePercentage: market.max_fee_percentage,
+        protocolFeePercentage: market.protocol_fee_percentage,
+        
+        // Performance metrics
+        dailyAPR: market.apr,
+        apy: market.apy,
+        tvl: parseFloat(market.liquidity),
+        volumeTvlRatio: market.volume_tvl_ratio,
+        volume24h: market.trade_volume_24h,
+        fees24h: market.fees_24h,
+        
+        // Technical details
+        binStep: market.bin_step,
+        currentPrice: market.current_price,
+        isBlacklisted: market.is_blacklisted || false,
+        
+        // Token information
+        tokenXMint: market.token_x_mint || market.mint_x,
+        tokenYMint: market.token_y_mint || market.mint_y,
+        tokenXSymbol: market.token_x_symbol,
+        tokenYSymbol: market.token_y_symbol,
+        tokenXLogo: market.token_x_logo,
+        tokenYLogo: market.token_y_logo,
+        
+        // Reserve information
+        reserveX: market.reserve_x,
+        reserveY: market.reserve_y,
+        reserveXAmount: market.reserve_x_amount,
+        reserveYAmount: market.reserve_y_amount,
+        
+        // Historical data
+        cumulativeTradeVolume: market.cumulative_trade_volume,
+        cumulativeFeeVolume: market.cumulative_fee_volume,
+        
+        // Time-based metrics
+        feesByTimeframe: market.fees_by_timeframe,
+        volumeByTimeframe: market.volume_by_timeframe,
+        feeVolumeRatios: market.fee_volume_ratios,
+        
+        // Metadata
+        tags: market.tags || [],
+        lastUpdated: market.last_updated
+      }))
+    });
+  } catch (error) {
+    console.error('Error fetching filtered markets:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch markets' });
+  }
+});
+
 // Start server
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   await tradingApp.initialize();
   console.log("TradingApp fully initialized and ready to handle requests");
+
+  // Schedule market refresh every hour
+  setInterval(async () => {
+    try {
+      const marketRepository = new MarketRepository();
+      await marketRepository.fetchAndSyncMeteoraPairs();
+      console.log('Markets refreshed in background job');
+    } catch (error) {
+      console.error('Error in background market refresh:', error);
+    }
+  }, 60 * 60 * 1000); // 1 hour
 }); 
