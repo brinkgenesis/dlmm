@@ -532,7 +532,7 @@ app.get('/api/markets/refresh', async (req, res) => {
     // Get optional query parameters and map them correctly
     const sortKey = req.query.sortKey as string;
     const orderBy = req.query.orderBy as string;
-    const hideLowTvl = req.query.hideLowTvl ? parseInt(req.query.hideLowTvl as string) : 30000; // Default to 10000
+    const hideLowTvl = req.query.hideLowTvl ? parseInt(req.query.hideLowTvl as string) : 30000;
     const hideLowApr = req.query.hideLowApr === 'true';
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 25;
     
@@ -554,10 +554,10 @@ app.get('/api/markets/refresh', async (req, res) => {
       limit
     });
     
-    // After fetching, run the SelectionIndexer to populate missing token metadata
-    console.log('Running SelectionIndexer to populate token metadata...');
+    // CHANGE HERE: Use processOnlyMissingTokenData instead of processMarkets
+    console.log('Running SelectionIndexer to populate missing token metadata in database...');
     const indexer = new SelectionIndexer();
-    await indexer.processMarkets();
+    await indexer.processOnlyMissingTokenData();
     
     res.json({ 
       success: true, 
