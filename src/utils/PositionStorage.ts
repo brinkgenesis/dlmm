@@ -89,34 +89,29 @@ export class PositionStorage {
    */
   private async load(): Promise<void> {
     try {
-      // First, try to load from local file
-      if (fs.existsSync(this.filePath)) {
-        const data = fs.readFileSync(this.filePath, 'utf-8');
-        this.positions = JSON.parse(data);
-        console.log(`Loaded positions from ${this.filePath}`);
-      } else {
-        // Ensure the directory exists
-        fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-        fs.writeFileSync(this.filePath, JSON.stringify({}), 'utf-8');
-        console.log(`Created new positions file at ${this.filePath}`);
-      }
-
-      // Then, if Supabase is enabled, try to load from there and merge
+      // If Supabase is enabled, try to load exclusively from there
       if (this.supabaseEnabled) {
         try {
           const supabasePositions = await this.positionRepository.loadPositions();
           
-          // Merge Supabase positions with local positions
-          // Local positions take precedence in case of conflict
-          this.positions = {
-            ...supabasePositions,
-            ...this.positions
-          };
+          // Use Supabase as the only source of truth
+          this.positions = supabasePositions;
           
-          console.log(`Merged positions from Supabase with local positions`);
+          console.log(`Loaded ${Object.keys(this.positions).length} positions from Supabase`);
+          return;
         } catch (error) {
           console.error('Error loading positions from Supabase:', error);
-          // Continue with local positions
+          // Initialize empty positions object if Supabase fails
+          this.positions = {};
+        }
+      } else {
+        // If Supabase is disabled, keep the JSON file as fallback
+        if (fs.existsSync(this.filePath)) {
+          const data = fs.readFileSync(this.filePath, 'utf-8');
+          this.positions = JSON.parse(data);
+          console.log(`Loaded positions from ${this.filePath}`);
+        } else {
+          this.positions = {};
         }
       }
     } catch (error: any) {
@@ -130,11 +125,9 @@ export class PositionStorage {
    */
   private save(): void {
     try {
-      // Save to local file
-      fs.writeFileSync(this.filePath, JSON.stringify(this.positions, null, 2), 'utf-8');
-      console.log(`Saved positions to ${this.filePath}`);
+      // Skip file saving completely
       
-      // If Supabase is enabled, sync data there too
+      // If Supabase is enabled, sync all data there
       if (this.supabaseEnabled) {
         this.positionRepository.syncAllPositions(this.positions)
           .catch(error => console.error('Error syncing positions to Supabase:', error));
@@ -171,7 +164,21 @@ export class PositionStorage {
     };
     
     this.positions[positionId] = positionData;
-    this.save(); // This will handle both local save and Supabase sync
+    
+    // Don't call save() for local file anymore, sync directly with Supabase
+    if (this.supabaseEnabled) {
+      this.positionRepository.syncPosition(positionId, positionData)
+        .catch(error => console.error(`Error syncing position ${positionId} to Supabase:`, error));
+      
+      // If pool address is available, use the enhanced sync method
+      if (data.poolAddress) {
+        this.positionRepository.syncPositionWithMarketData(
+          positionId, 
+          positionData,
+          data.poolAddress
+        ).catch(error => console.error(`Error syncing position to Supabase:`, error));
+      }
+    }
   }
 
   /**
@@ -460,6 +467,7 @@ export class PositionStorage {
       minBinId: number;
       maxBinId: number;
       snapshotPositionValue: number;
+      poolAddress?: string;
     }
   ): void {
     const oldPositionKey = oldPositionPubKey.toBase58();
@@ -482,7 +490,9 @@ export class PositionStorage {
       // Increment rebalance count
       rebalanceCount: (oldPosition.rebalanceCount || 0) + 1,
       // Reference to old position for tracking lineage
-      previousPositionKey: oldPositionKey
+      previousPositionKey: oldPositionKey,
+      // Transfer poolAddress from old position if not provided in new data
+      poolAddress: newPositionData.poolAddress || oldPosition.poolAddress
     };
     
     console.log(`Transferred history from position ${oldPositionKey} to ${newPositionKey}`);

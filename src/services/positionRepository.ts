@@ -255,27 +255,6 @@ export class PositionRepository {
     return data;
   }
 
-  // Add new method to get market data for a pool address
-  async getMarketDataForPool(poolAddress: string): Promise<any | null> {
-    try {
-      const { data, error } = await supabase
-        .from('markets')
-        .select('*')
-        .eq('public_key', poolAddress)
-        .single();
-      
-      if (error) {
-        console.log(`No market found for pool ${poolAddress}`);
-        return null;
-      }
-      
-      return data;
-    } catch (error) {
-      console.error(`Error fetching market data for pool ${poolAddress}:`, error);
-      return null;
-    }
-  }
-
   // Enhanced version of syncPosition that cross-references market data
   async syncPositionWithMarketData(positionKey: string, positionData: any, poolAddress: string): Promise<void> {
     try {
@@ -334,6 +313,71 @@ export class PositionRepository {
       }
     } catch (error) {
       console.error(`Error syncing position ${positionKey} to Supabase:`, error);
+    }
+  }
+
+  // Enhanced getMarketDataForPool to handle missing data better
+  async getMarketDataForPool(poolAddress: string): Promise<any | null> {
+    try {
+      // First try by public_key which is used most places
+      const { data, error } = await supabase
+        .from('markets')
+        .select('*')
+        .eq('public_key', poolAddress)
+        .single();
+      
+      if (error || !data) {
+        // Fall back to address field as well
+        const { data: addressData, error: addressError } = await supabase
+          .from('markets')
+          .select('*')
+          .eq('address', poolAddress)
+          .single();
+        
+        if (addressError) {
+          console.log(`No market found for pool ${poolAddress}`);
+          return null;
+        }
+        
+        return addressData;
+      }
+      
+      return data;
+    } catch (error) {
+      console.error(`Error fetching market data for pool ${poolAddress}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Gets positions in a format compatible with the old positions.json structure
+   */
+  async getPositionsInLegacyFormat(): Promise<{[key: string]: any}> {
+    try {
+      const positions = await this.getPositionsByUserId('default-user');
+      
+      // Convert to old format
+      const formattedPositions: {[key: string]: any} = {};
+      
+      for (const position of positions) {
+        if (position.position_key) {
+          formattedPositions[position.position_key] = {
+            originalActiveBin: position.original_active_bin || 0,
+            minBinId: position.min_bin_id,
+            maxBinId: position.max_bin_id,
+            snapshotPositionValue: parseFloat(position.snapshot_position_value) || 0,
+            startingPositionValue: parseFloat(position.starting_position_value) || 0,
+            originalStartDate: position.original_start_date ? new Date(position.original_start_date).getTime() : undefined,
+            rebalanceCount: position.rebalance_count || 0,
+            previousPositionKey: position.previous_position_key
+          };
+        }
+      }
+      
+      return formattedPositions;
+    } catch (error) {
+      console.error('Error loading positions in legacy format:', error);
+      return {};
     }
   }
 }

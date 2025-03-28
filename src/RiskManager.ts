@@ -9,6 +9,7 @@ import { ComputeBudgetProgram, sendAndConfirmTransaction } from '@solana/web3.js
 import { PositionStorage } from './utils/PositionStorage';
 import { Config } from './models/Config';
 import { withSafeKeypair } from './utils/walletHelper';
+import { supabase } from './services/supabase';
 
 // Mock data generator for testing
 const MOCK_VOLUME_DATA: VolumeData[] = [
@@ -308,18 +309,61 @@ export class RiskManager {
     
     if (!positions || positions.length === 0) return false;
     
-    // Check volume for each token in positions
+    // Instead of using fetchTokenMetrics which is causing errors, 
+    // use market data from Supabase that already contains volume information
     for (const position of positions) {
-      const tokenMint = position.tokenX.publicKey.toBase58();
-      const metrics = await fetchTokenMetrics('solana', tokenMint);
-      const volumeMA = await this.calculateVolumeMA(tokenMint);
-      
-      if (metrics.volumeMcapRatio < volumeMA * threshold) {
-        return true; // Volume drop detected for at least one token
+      try {
+        const poolAddress = position.publicKey.toString();
+        
+        // Get market data from Supabase
+        const { data: marketData } = await supabase
+          .from('markets')
+          .select('trade_volume_24h, liquidity, fee_volume_ratios')
+          .eq('public_key', poolAddress)
+          .single();
+        
+        if (!marketData) {
+          console.log(`No market data for pool ${poolAddress}`);
+          continue;
+        }
+        
+        // Calculate volume/TVL ratio from stored data
+        const volume = marketData.trade_volume_24h || 0;
+        const tvl = parseFloat(marketData.liquidity) || 1; // Avoid division by zero
+        const volumeTvlRatio = volume / tvl;
+        
+        // Check if volume is below threshold
+        const volumeMA = this.getHistoricalVolumeAverage(marketData.fee_volume_ratios);
+        if (volumeTvlRatio < volumeMA * threshold) {
+          return true; // Volume drop detected
+        }
+      } catch (error) {
+        console.error(`Error checking volume for position ${position.publicKey.toString()}:`, error);
       }
     }
     
     return false;
+  }
+
+  // Helper method to calculate volume average from stored metrics
+  private getHistoricalVolumeAverage(feeVolumeRatios: any): number {
+    if (!feeVolumeRatios) return 0;
+    
+    // Use the fee volume ratios already stored in the database
+    const values = [
+      feeVolumeRatios.min_30 || 0,
+      feeVolumeRatios.hour_1 || 0,
+      feeVolumeRatios.hour_2 || 0,
+      feeVolumeRatios.hour_4 || 0,
+      feeVolumeRatios.hour_12 || 0,
+      feeVolumeRatios.hour_24 || 0
+    ];
+    
+    // Filter out zeros and calculate average
+    const nonZeroValues = values.filter(v => v > 0);
+    if (nonZeroValues.length === 0) return 0;
+    
+    return nonZeroValues.reduce((sum, val) => sum + val, 0) / nonZeroValues.length;
   }
 
   public async closeAllPositions(isPermanentClosure: boolean = true): Promise<void> {

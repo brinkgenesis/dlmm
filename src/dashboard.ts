@@ -80,7 +80,6 @@ interface StoredPositionData {
 export class Dashboard {
   private config: Config;
   private connection: Connection;
-  private positionsPath: string;
   private tokenPrices: Record<string, number> = {};
   private positionStorage: PositionStorage;
   private positionRepository: PositionRepository;
@@ -92,13 +91,12 @@ export class Dashboard {
   ) {
     this.config = config;
     this.connection = config.connection;
-    this.positionsPath = path.join(process.cwd(), 'data', 'positions.json');
     this.positionStorage = positionStorage || new PositionStorage(config);
     this.positionRepository = positionRepository || new PositionRepository();
   }
 
   /**
-   * Get all positions from positions.json
+   * Get all positions from blockchain and Supabase
    */
   public async getAllPositions(): Promise<PositionData[]> {
     try {
@@ -118,15 +116,16 @@ export class Dashboard {
       
       console.log(`Found ${positionsMap.size} positions on-chain`);
       
-      // Load positions.json for additional data
+      // Load positions from Supabase instead of positions.json
       let storedPositions: {[key: string]: StoredPositionData} = {};
-      console.log(`Loading positions from: ${this.positionsPath}`);
-      if (fs.existsSync(this.positionsPath)) {
-        console.log(`File exists with size: ${fs.statSync(this.positionsPath).size} bytes`);
-        const positionsJson = fs.readFileSync(this.positionsPath, 'utf-8');
-        storedPositions = JSON.parse(positionsJson);
-      } else {
-        console.error(`File does not exist: ${this.positionsPath}`);
+      console.log(`Loading positions from Supabase...`);
+      
+      try {
+        // Get positions in the format expected by the dashboard
+        storedPositions = await this.positionRepository.getPositionsInLegacyFormat();
+        console.log(`Loaded ${Object.keys(storedPositions).length} positions from Supabase`);
+      } catch (error) {
+        console.error(`Error loading positions from Supabase:`, error);
       }
       
       // Create array of enriched position data
@@ -169,7 +168,7 @@ export class Dashboard {
           
           // Use market data if available
           if (marketData) {
-            // Populate token information from market data
+            // Use market data directly for token information
             positionData.tokenXSymbol = marketData.token_x_symbol;
             positionData.tokenYSymbol = marketData.token_y_symbol;
             positionData.tokenXLogo = marketData.token_x_logo;

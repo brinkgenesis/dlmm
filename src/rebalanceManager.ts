@@ -412,7 +412,8 @@ export class RebalanceManager {
           originalActiveBin: activeBinId,
           minBinId: newMinBinId,
           maxBinId: newMaxBinId,
-          snapshotPositionValue: positionValue
+          snapshotPositionValue: positionValue,
+          poolAddress: poolAddress.toString()
         }
       );
       
@@ -512,12 +513,13 @@ export class RebalanceManager {
         console.log('New position not found in user positions, using default value 0');
       }
       
-      // Add new position to storage
+      // Add new position to storage with pool address
       this.positionStorage.addPosition(newPositionKeypair.publicKey, {
         originalActiveBin: activeBinId,
         minBinId,
         maxBinId,
-        snapshotPositionValue: positionValue
+        snapshotPositionValue: positionValue,
+        poolAddress: poolAddress.toString()
       });
       
       console.log(`New position created: ${newPositionKeypair.publicKey.toString()}`);
