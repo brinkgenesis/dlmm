@@ -316,33 +316,84 @@ export class PositionRepository {
     }
   }
 
-  // Enhanced getMarketDataForPool to handle missing data better
+  // Enhanced getMarketDataForPool function with extensive logging and better matching
   async getMarketDataForPool(poolAddress: string): Promise<any | null> {
     try {
-      // First try by public_key which is used most places
-      const { data, error } = await supabase
+      console.log(`Looking up market data for pool: ${poolAddress}`);
+      
+      // First try by public_key (standard lookup)
+      const { data: publicKeyData, error: publicKeyError } = await supabase
         .from('markets')
         .select('*')
         .eq('public_key', poolAddress)
         .single();
       
-      if (error || !data) {
-        // Fall back to address field as well
-        const { data: addressData, error: addressError } = await supabase
-          .from('markets')
-          .select('*')
-          .eq('address', poolAddress)
-          .single();
-        
-        if (addressError) {
-          console.log(`No market found for pool ${poolAddress}`);
-          return null;
-        }
-        
+      if (!publicKeyError && publicKeyData) {
+        console.log(`Found market by public_key: ${poolAddress}`);
+        return publicKeyData;
+      }
+      
+      // Then try by address field
+      const { data: addressData, error: addressError } = await supabase
+        .from('markets')
+        .select('*')
+        .eq('address', poolAddress)
+        .single();
+      
+      if (!addressError && addressData) {
+        console.log(`Found market by address: ${poolAddress}`);
         return addressData;
       }
       
-      return data;
+      // If still not found, try a non-case-sensitive search
+      const { data: caseInsensitiveData, error: caseInsensitiveError } = await supabase
+        .from('markets')
+        .select('*')
+        .ilike('public_key', poolAddress)
+        .single();
+      
+      if (!caseInsensitiveError && caseInsensitiveData) {
+        console.log(`Found market by case-insensitive public_key: ${poolAddress}`);
+        return caseInsensitiveData;
+      }
+      
+      // Last attempt: try removing any whitespace
+      const cleanPoolAddress = poolAddress.trim();
+      if (cleanPoolAddress !== poolAddress) {
+        const { data: cleanedData, error: cleanedError } = await supabase
+          .from('markets')
+          .select('*')
+          .eq('public_key', cleanPoolAddress)
+          .single();
+        
+        if (!cleanedError && cleanedData) {
+          console.log(`Found market by cleaned public_key: ${cleanPoolAddress}`);
+          return cleanedData;
+        }
+      }
+      
+      // If we get here, log a helpful message with more context
+      console.error(`Market lookup failed for pool ${poolAddress}. Checking if market exists...`);
+      
+      // Check if the market exists at all by counting total records
+      const { count } = await supabase
+        .from('markets')
+        .select('*', { count: 'exact', head: true });
+      
+      console.error(`Total markets in database: ${count}`);
+      
+      // Sample some markets for debugging
+      const { data: sampleMarkets } = await supabase
+        .from('markets')
+        .select('public_key, address')
+        .limit(3);
+      
+      console.error('Sample markets for format comparison:');
+      sampleMarkets?.forEach(market => {
+        console.error(`- public_key: ${market.public_key}, address: ${market.address}`);
+      });
+      
+      return null;
     } catch (error) {
       console.error(`Error fetching market data for pool ${poolAddress}:`, error);
       return null;
