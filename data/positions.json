@@ -1,26 +1,26 @@
 {
   "D8UxBuyreioGX5611bYMvJ56B8WU9eTGQxNWKARo4Gmr": {
-    "originalActiveBin": -54,
+    "originalActiveBin": -51,
     "minBinId": -89,
     "maxBinId": -20,
-    "snapshotPositionValue": 1.341285239701696,
-    "startingPositionValue": 1.341285239701696,
+    "snapshotPositionValue": 1.3490916938142967,
+    "startingPositionValue": 1.3490916938142967,
     "feeHistory": [
       {
-        "timestamp": 1743112831545,
-        "feesUSD": 0.1063046856379795,
-        "positionValue": 1.341285239701696
+        "timestamp": 1743123118740,
+        "feesUSD": 0.106438668679433,
+        "positionValue": 1.3490916938142967
       },
       {
-        "timestamp": 1743112833877,
-        "feesUSD": 0.1063046856379795,
-        "positionValue": 1.341285239701696
+        "timestamp": 1743123121330,
+        "feesUSD": 0.106438668679433,
+        "positionValue": 1.3490916938142967
       }
     ],
-    "lastFeeTimestamp": 1743112833877,
-    "lastFeeX": "610571",
-    "lastFeeY": "402541",
-    "lastFeesUSD": 0.1063046856379795,
-    "lastPositionValue": 1.341285239701696
+    "lastFeeTimestamp": 1743123121330,
+    "lastFeeX": "611548",
+    "lastFeeY": "406454",
+    "lastFeesUSD": 0.106438668679433,
+    "lastPositionValue": 1.3490916938142967
   }
 }

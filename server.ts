@@ -214,7 +214,10 @@ app.get('/api/markets', async (req, res) => {
     await indexer.processOnlyMissingTokenData();
     
     // Get markets from database (already filtered for better performance)
-    const marketsData = await marketRepository.getFilteredMarkets({ limit: 25 });
+    const marketsData = await marketRepository.getFilteredMarkets({ 
+      minLiquidity: 10000,
+      limit: 25 
+    });
     
     const markets = marketsData.map(market => ({
       // Basic identification
@@ -267,7 +270,20 @@ app.get('/api/markets', async (req, res) => {
       
       // Metadata
       tags: market.tags || [],
-      lastUpdated: market.last_updated
+      lastUpdated: market.last_updated,
+      
+      // Add token age info
+      tokenXCreatedAt: market.token_x_created_at,
+      tokenYCreatedAt: market.token_y_created_at,
+      tokensOldEnough: market.tokens_old_enough,
+      
+      // Calculate token age in days for display
+      tokenXAgeDays: market.token_x_created_at ? 
+        Math.floor((Date.now() - new Date(market.token_x_created_at).getTime()) / (1000 * 60 * 60 * 24)) : 
+        null,
+      tokenYAgeDays: market.token_y_created_at ? 
+        Math.floor((Date.now() - new Date(market.token_y_created_at).getTime()) / (1000 * 60 * 60 * 24)) : 
+        null,
     }));
     
     // Include wallet information in the response
@@ -652,7 +668,20 @@ app.get('/api/markets/filtered', async (req, res) => {
         
         // Metadata
         tags: market.tags || [],
-        lastUpdated: market.last_updated
+        lastUpdated: market.last_updated,
+        
+        // Add token age info
+        tokenXCreatedAt: market.token_x_created_at,
+        tokenYCreatedAt: market.token_y_created_at,
+        tokensOldEnough: market.tokens_old_enough,
+        
+        // Calculate token age in days for display
+        tokenXAgeDays: market.token_x_created_at ? 
+          Math.floor((Date.now() - new Date(market.token_x_created_at).getTime()) / (1000 * 60 * 60 * 24)) : 
+          null,
+        tokenYAgeDays: market.token_y_created_at ? 
+          Math.floor((Date.now() - new Date(market.token_y_created_at).getTime()) / (1000 * 60 * 60 * 24)) : 
+          null,
       }))
     });
   } catch (error) {

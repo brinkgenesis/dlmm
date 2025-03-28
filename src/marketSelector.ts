@@ -35,7 +35,7 @@ interface MarketInfo {
 }
 
 export class MarketSelector {
-  public markets: MarketInfo[];
+  public markets: MarketInfo[] = [];
   private connection: Connection;
   private wallet: Keypair;
   private positionStorage: PositionStorage;
@@ -49,12 +49,6 @@ export class MarketSelector {
     positionStorage: PositionStorage,
     config: Config
   ) {
-    // Get market data from JSON file
-    const marketsPath = path.join(__dirname, 'models', 'marketSelection.json');
-    const jsonData = fs.readFileSync(marketsPath, 'utf-8');
-    const parsed = JSON.parse(jsonData);
-
-    this.markets = parsed.markets;
     this.connection = connection;
     this.wallet = wallet;
     this.positionStorage = positionStorage;
@@ -67,10 +61,8 @@ export class MarketSelector {
         console.error('Error loading markets from Supabase:', error);
       });
       
-      // Also sync our local markets to Supabase
-      this.marketRepository.syncMarkets(this.markets).catch(error => {
-        console.error('Error syncing markets to Supabase:', error);
-      });
+      // No need to sync empty markets array initially
+      // We'll load data from Supabase first
     }
   }
 

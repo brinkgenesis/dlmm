@@ -303,7 +303,7 @@ class SelectionIndexer {
 // Execute if run directly
 if (require.main === module) {
   const indexer = new SelectionIndexer();
-  indexer.processMarkets()
+  indexer.processOnlyMissingTokenData()
     .then(() => console.log('Market indexing complete.'))
     .catch(err => {
       console.error('Fatal error during market indexing:', err);

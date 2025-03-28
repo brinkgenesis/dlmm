@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import axios from 'axios';
+import { getTokenInfo, isTokenOldEnough } from '../utils/fetchPriceJupiter';
 
 interface MarketFeesTvlRatio {
   min_30: number;
@@ -58,6 +59,8 @@ export class MarketRepository {
     const { data, error } = await supabase
       .from('markets')
       .select('*')
+      .gte('liquidity', 10000)
+      .eq('tokens_old_enough', true)
       .order('apr', { ascending: false });
     
     if (error) throw new Error(`Failed to fetch markets: ${error.message}`);
@@ -75,9 +78,10 @@ export class MarketRepository {
       .from('markets')
       .select('*');
     
-    if (filters.minLiquidity) {
-      query = query.gte('liquidity', filters.minLiquidity);
-    }
+    const minLiquidity = Math.max(filters.minLiquidity || 0, 10000);
+    query = query.gte('liquidity', minLiquidity);
+    
+    query = query.eq('tokens_old_enough', true);
     
     if (filters.minVolume) {
       query = query.gte('trade_volume_24h', filters.minVolume);
@@ -106,9 +110,7 @@ export class MarketRepository {
   }
   
   async syncMarkets(markets: any[]) {
-    // For each market in the array
     for (const market of markets) {
-      // Check if market exists
       const { data: existingMarket } = await supabase
         .from('markets')
         .select('id')
@@ -225,15 +227,21 @@ export class MarketRepository {
         .eq('public_key', pair.address)
         .single();
       
-      // Transform the pair data for Supabase
+      // Get token ages when syncing
+      const tokenXInfo = await getTokenInfo(pair.mint_x);
+      const tokenYInfo = await getTokenInfo(pair.mint_y);
+      
+      const isTokenXOldEnough = isTokenOldEnough(tokenXInfo?.created_at);
+      const isTokenYOldEnough = isTokenOldEnough(tokenYInfo?.created_at);
+      
       const marketData = {
         name: pair.name,
-        public_key: pair.address, // Match your existing schema
+        public_key: pair.address,
         address: pair.address,
         mint_x: pair.mint_x,
         mint_y: pair.mint_y,
-        token_x_mint: pair.mint_x, // Match your existing schema
-        token_y_mint: pair.mint_y, // Match your existing schema
+        token_x_mint: pair.mint_x,
+        token_y_mint: pair.mint_y,
         reserve_x: pair.reserve_x,
         reserve_y: pair.reserve_y,
         reserve_x_amount: pair.reserve_x_amount,
@@ -269,7 +277,12 @@ export class MarketRepository {
         token_x_symbol: existingMarket?.token_x_symbol || null,
         token_y_symbol: existingMarket?.token_y_symbol || null,
         token_x_logo: existingMarket?.token_x_logo || null,
-        token_y_logo: existingMarket?.token_y_logo || null
+        token_y_logo: existingMarket?.token_y_logo || null,
+        
+        // Add token age information
+        token_x_created_at: tokenXInfo?.created_at || null,
+        token_y_created_at: tokenYInfo?.created_at || null,
+        tokens_old_enough: isTokenXOldEnough && isTokenYOldEnough
       };
       
       if (existingMarket) {

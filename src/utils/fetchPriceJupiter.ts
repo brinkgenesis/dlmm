@@ -14,6 +14,7 @@ interface TokenInfo {
   extensions?: Record<string, any>;
   chainId?: number;
   coingeckoId?: string;
+  created_at?: string | null; // ISO date string or null
 }
 
 interface TokenResponse {
@@ -24,6 +25,7 @@ interface TokenResponse {
   logoURI?: string;
   tags?: string[];
   extensions?: Record<string, any>;
+  created_at?: string | null; // ISO date string or null
   // Other fields that Jupiter API might return
 }
 
@@ -51,6 +53,7 @@ export async function getTokenInfo(mintAddress: string): Promise<TokenInfo | nul
         logoURI: tokenData.logoURI,
         tags: tokenData.tags,
         extensions: tokenData.extensions,
+        created_at: tokenData.created_at || undefined // Use undefined instead of null
       };
     }
     
@@ -337,4 +340,38 @@ export async function tokenAmountToUsd(
   if (price <= 0) return null;
   
   return tokenAmount * price;
+}
+
+/**
+ * Gets token ages for multiple tokens
+ * @param mintAddresses - Array of token mint addresses
+ * @returns Map of mint addresses to their creation dates
+ */
+export async function getTokenAges(mintAddresses: string[]): Promise<Record<string, string>> {
+  const tokensInfo = await getTokensInfo(mintAddresses);
+  
+  // Extract just the creation dates
+  const creationDates: Record<string, string> = {};
+  
+  for (const [mintAddress, info] of Object.entries(tokensInfo)) {
+    if (info.created_at) {
+      creationDates[mintAddress] = info.created_at;
+    }
+  }
+  
+  return creationDates;
+}
+
+/**
+ * Checks if a token is at least 24 hours old
+ * @param createdAt - Token creation date
+ * @returns True if the token is at least 24 hours old, false otherwise
+ */
+export function isTokenOldEnough(createdAt: string | null | undefined): boolean {
+  if (!createdAt) return false;
+  
+  const tokenCreationTime = new Date(createdAt).getTime();
+  const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+  
+  return tokenCreationTime <= oneDayAgo;
 } 
