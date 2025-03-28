@@ -21,6 +21,7 @@ import {
   getTokenDisplayInfo
 } from './utils/fetchPriceJupiter';
 import { withSafeKeypair } from './utils/walletHelper';
+import { PositionRepository } from './services/positionRepository';
 
 export interface PositionData {
   publicKey: string;
@@ -82,15 +83,18 @@ export class Dashboard {
   private positionsPath: string;
   private tokenPrices: Record<string, number> = {};
   private positionStorage: PositionStorage;
+  private positionRepository: PositionRepository;
 
   constructor(
     config: Config,
-    positionStorage?: PositionStorage
+    positionStorage?: PositionStorage,
+    positionRepository?: PositionRepository
   ) {
     this.config = config;
     this.connection = config.connection;
     this.positionsPath = path.join(process.cwd(), 'data', 'positions.json');
     this.positionStorage = positionStorage || new PositionStorage(config);
+    this.positionRepository = positionRepository || new PositionRepository();
   }
 
   /**
@@ -128,8 +132,19 @@ export class Dashboard {
       // Create array of enriched position data
       const enrichedPositions: PositionData[] = [];
       
+      // Create a cache of market data to avoid repeated queries
+      const marketDataCache: Record<string, any> = {};
+      
       // Process on-chain positions
       for (const [poolAddress, position] of positionsMap.entries()) {
+        // Fetch market data for this pool once and cache it
+        if (!marketDataCache[poolAddress]) {
+          const marketData = await this.positionRepository.getMarketDataForPool(poolAddress);
+          marketDataCache[poolAddress] = marketData || null;
+        }
+        
+        const marketData = marketDataCache[poolAddress];
+        
         // For each position in this pool
         for (const lbPosition of position.lbPairPositionsData) {
           const positionKey = lbPosition.publicKey.toBase58();
@@ -151,6 +166,19 @@ export class Dashboard {
             startingPositionValue: storedPosition?.startingPositionValue || 0,
             lastUpdated: new Date().toISOString()
           };
+          
+          // Use market data if available
+          if (marketData) {
+            // Populate token information from market data
+            positionData.tokenXSymbol = marketData.token_x_symbol;
+            positionData.tokenYSymbol = marketData.token_y_symbol;
+            positionData.tokenXLogo = marketData.token_x_logo;
+            positionData.tokenYLogo = marketData.token_y_logo;
+            positionData.tokenXMint = marketData.token_x_mint;
+            positionData.tokenYMint = marketData.token_y_mint;
+            positionData.dailyAPR = marketData.daily_apr;
+            positionData.baseFeeRate = parseFloat(marketData.base_fee_percentage);
+          }
           
           try {
             // Get pool and DLMM instance
@@ -327,7 +355,7 @@ export class Dashboard {
                   console.log(`Added position ${positionKey} to storage`);
                 }
                 
-                // Now update fee data (this will be stored because position exists)
+                // Now update fee data with pool address
                 this.positionStorage.updatePositionFeeData(
                   lbPosition.publicKey,
                   {
@@ -336,7 +364,8 @@ export class Dashboard {
                     feesUSD: positionData.pendingFeesUSD,
                     positionValue: positionData.currentValue || 0,
                     timestamp: Date.now()
-                  }
+                  },
+                  poolAddress // Pass pool address
                 );
                 
                 console.log(`Updated fee data for position ${positionKey}`);

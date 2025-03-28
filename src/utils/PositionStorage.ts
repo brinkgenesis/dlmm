@@ -61,6 +61,7 @@ export interface PositionData {
   lastFeeY?: string;
   lastFeesUSD?: number;
   lastPositionValue?: number;
+  poolAddress?: string;
 }
 
 /**
@@ -158,6 +159,7 @@ export class PositionStorage {
       startingPositionValue?: number;
       originalStartDate?: number;
       rebalanceCount?: number;
+      poolAddress?: string;
     }
   ): void {
     const positionId = positionKey.toString();
@@ -210,6 +212,7 @@ export class PositionStorage {
    * Updates fee data for APR calculations for a specific position
    * @param positionPubKey - The public key of the position
    * @param feeData - The fee data to update
+   * @param poolAddress - The pool address associated with the position
    */
   public updatePositionFeeData(
     positionPubKey: PublicKey, 
@@ -219,7 +222,8 @@ export class PositionStorage {
       feesUSD: number;
       positionValue: number;
       timestamp: number;
-    }
+    },
+    poolAddress?: string
   ): void {
     const positionKey = positionPubKey.toBase58();
     let position = this.positions[positionKey];
@@ -342,6 +346,21 @@ export class PositionStorage {
       ...(dailyAPR !== undefined ? { dailyAPR } : {}),
       feeHistory: position.feeHistory // Save history
     };
+    
+    // If Supabase is enabled and poolAddress is provided, use the enhanced sync
+    if (this.supabaseEnabled && poolAddress) {
+      this.positionRepository.syncPositionWithMarketData(
+        positionKey, 
+        this.positions[positionKey],
+        poolAddress
+      ).catch(error => console.error(`Error syncing position to Supabase:`, error));
+    } else if (this.supabaseEnabled) {
+      // Fall back to regular sync if no pool address
+      this.positionRepository.syncPosition(
+        positionKey, 
+        this.positions[positionKey]
+      ).catch(error => console.error(`Error syncing position to Supabase:`, error));
+    }
     
     this.save();
   }

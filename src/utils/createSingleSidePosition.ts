@@ -135,7 +135,8 @@ export async function createSingleSidePosition(
             minBinId,
             maxBinId,
             snapshotPositionValue: dollarValue,
-            startingPositionValue: dollarValue // Important: set initial starting value
+            startingPositionValue: dollarValue, // Important: set initial starting value
+            poolAddress: pool.pubkey.toString()
           });
         }
       }

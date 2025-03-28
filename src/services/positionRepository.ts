@@ -254,4 +254,86 @@ export class PositionRepository {
     if (error) throw new Error(`Failed to update position fee data: ${error.message}`);
     return data;
   }
+
+  // Add new method to get market data for a pool address
+  async getMarketDataForPool(poolAddress: string): Promise<any | null> {
+    try {
+      const { data, error } = await supabase
+        .from('markets')
+        .select('*')
+        .eq('public_key', poolAddress)
+        .single();
+      
+      if (error) {
+        console.log(`No market found for pool ${poolAddress}`);
+        return null;
+      }
+      
+      return data;
+    } catch (error) {
+      console.error(`Error fetching market data for pool ${poolAddress}:`, error);
+      return null;
+    }
+  }
+
+  // Enhanced version of syncPosition that cross-references market data
+  async syncPositionWithMarketData(positionKey: string, positionData: any, poolAddress: string): Promise<void> {
+    try {
+      // First check if we have market data for this pool
+      const marketData = await this.getMarketDataForPool(poolAddress);
+      
+      // Check if position already exists
+      const { data: existingPosition } = await supabase
+        .from('positions')
+        .select('id')
+        .eq('position_key', positionKey)
+        .single();
+      
+      // Format the data for Supabase with values from marketData when available
+      const supabaseData = {
+        user_id: this.defaultUserId,
+        position_key: positionKey,
+        pool_address: poolAddress,
+        token_x_mint: positionData.tokenXMint || '',
+        token_y_mint: positionData.tokenYMint || '',
+        // Use market data if available, otherwise use position data or null
+        token_x_symbol: marketData?.token_x_symbol || positionData.tokenXSymbol || null,
+        token_y_symbol: marketData?.token_y_symbol || positionData.tokenYSymbol || null,
+        token_x_logo: marketData?.token_x_logo || positionData.tokenXLogo || null,
+        token_y_logo: marketData?.token_y_logo || positionData.tokenYLogo || null,
+        original_active_bin: positionData.originalActiveBin,
+        min_bin_id: positionData.minBinId,
+        max_bin_id: positionData.maxBinId,
+        pending_fees_usd: positionData.lastFeesUSD,
+        total_claimed_fee_x: positionData.lastFeeX,
+        total_claimed_fee_y: positionData.lastFeeY,
+        // Use market data for APR if position doesn't have it
+        daily_apr: positionData.dailyAPR !== undefined ? positionData.dailyAPR : marketData?.daily_apr,
+        starting_position_value: positionData.startingPositionValue || positionData.snapshotPositionValue,
+        current_value: positionData.lastPositionValue,
+        original_start_date: positionData.originalStartDate ? new Date(positionData.originalStartDate).toISOString() : undefined,
+        rebalance_count: positionData.rebalanceCount,
+        previous_position_key: positionData.previousPositionKey,
+        fee_history: positionData.feeHistory,
+        // Additional data from markets table
+        bin_step: marketData?.bin_step,
+        base_fee: marketData?.base_fee
+      };
+      
+      if (existingPosition) {
+        // Update existing position
+        await supabase
+          .from('positions')
+          .update(supabaseData)
+          .eq('id', existingPosition.id);
+      } else {
+        // Insert new position
+        await supabase
+          .from('positions')
+          .insert(supabaseData);
+      }
+    } catch (error) {
+      console.error(`Error syncing position ${positionKey} to Supabase:`, error);
+    }
+  }
 }
