@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // Token information interfaces
-interface TokenInfo {
+export interface TokenInfo {
   address: string;
   symbol: string;
   name: string;
@@ -343,20 +343,58 @@ export async function tokenAmountToUsd(
 }
 
 /**
+ * Fetches comprehensive token information for multiple tokens from Jupiter
+ * Includes symbol, name, decimals, logoURI, and created_at
+ * @param mintAddresses - Array of token mint addresses
+ * @returns Map of mint addresses to their comprehensive token information
+ */
+export async function getComprehensiveTokensInfo(mintAddresses: string[]): Promise<Record<string, TokenInfo>> {
+  const result: Record<string, TokenInfo> = {};
+  const batchSize = 50; // Process in batches to potentially avoid hitting request limits within Promise.all
+  
+  console.log(`Fetching comprehensive info for ${mintAddresses.length} tokens...`);
+
+  for (let i = 0; i < mintAddresses.length; i += batchSize) {
+    const batch = mintAddresses.slice(i, i + batchSize);
+    const promises = batch.map(mint => getTokenInfo(mint).catch(err => {
+      // Log error but return null to not break Promise.all
+      console.error(`Error fetching info for mint ${mint} in batch: ${err}`);
+      return null;
+    }));
+    
+    const batchResults = await Promise.all(promises);
+    
+    batchResults.forEach((tokenInfo, index) => {
+      if (tokenInfo) {
+        const mintAddress = batch[index];
+        result[mintAddress] = tokenInfo;
+      }
+    });
+    
+    // Optional: Add a small delay between batches if still hitting limits
+    if (i + batchSize < mintAddresses.length) {
+      await new Promise(resolve => setTimeout(resolve, 250)); // 250ms delay
+    }
+  }
+
+  console.log(`Fetched info for ${Object.keys(result).length} tokens successfully.`);
+  return result;
+}
+
+/**
  * Gets token ages for multiple tokens
  * @param mintAddresses - Array of token mint addresses
  * @returns Map of mint addresses to their creation dates
  */
-export async function getTokenAges(mintAddresses: string[]): Promise<Record<string, string>> {
-  const tokensInfo = await getTokensInfo(mintAddresses);
+export async function getTokenAges(mintAddresses: string[]): Promise<Record<string, string | null>> {
+  // Use the comprehensive function to leverage batching/caching if implemented
+  const tokensInfo = await getComprehensiveTokensInfo(mintAddresses); 
   
   // Extract just the creation dates
-  const creationDates: Record<string, string> = {};
+  const creationDates: Record<string, string | null> = {};
   
-  for (const [mintAddress, info] of Object.entries(tokensInfo)) {
-    if (info.created_at) {
-      creationDates[mintAddress] = info.created_at;
-    }
+  for (const mintAddress of mintAddresses) {
+      creationDates[mintAddress] = tokensInfo[mintAddress]?.created_at ?? null;
   }
   
   return creationDates;

@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import axios from 'axios';
-import { getTokenInfo, isTokenOldEnough } from '../utils/fetchPriceJupiter';
+import { getTokenInfo, isTokenOldEnough, getComprehensiveTokensInfo, TokenInfo } from '../utils/fetchPriceJupiter';
 
 interface MarketFeesTvlRatio {
   min_30: number;
@@ -203,41 +203,84 @@ export class MarketRepository {
       
       console.log(`Found ${allPairs.length} pairs from Meteora API`);
       
-      // Sync each pair to Supabase
+      // --- BATCH TOKEN INFO FETCH ---
+      // 1. Collect all unique mint addresses
+      const uniqueMints = new Set<string>();
+      allPairs.forEach(pair => {
+        uniqueMints.add(pair.mint_x);
+        uniqueMints.add(pair.mint_y);
+      });
+      const mintsArray = Array.from(uniqueMints);
+
+      // 2. Fetch all token info in batches
+      console.log(`Fetching token info for ${mintsArray.length} unique mints...`);
+      // Use the new comprehensive function
+      const tokenInfoMap = await getComprehensiveTokensInfo(mintsArray); 
+      console.log(`Successfully fetched info for ${Object.keys(tokenInfoMap).length} mints.`);
+      // --- END BATCH FETCH ---
+
+      // Sync each pair to Supabase, passing the fetched info
       for (const pair of allPairs) {
-        await this.syncPairToSupabase(pair);
+         // Pass the map to the sync function
+        await this.syncPairToSupabase(pair, tokenInfoMap);
       }
       
       console.log('Market data sync completed successfully');
       return allPairs;
     } catch (error) {
       console.error('Error fetching and syncing Meteora pairs:', error);
+      if (axios.isAxiosError(error) && error.response?.status === 429) {
+          console.error("Rate limit hit while fetching from Meteora API itself. Consider adding delays or reducing frequency.");
+      }
       throw error;
     }
   }
   
-  private async syncPairToSupabase(pair: MeteoraPairData) {
+  private async syncPairToSupabase(pair: MeteoraPairData, tokenInfoMap: Record<string, TokenInfo | null>) {
     try {
-      console.log(`Syncing pair: ${pair.name} (${pair.address})`);
+      // Reduced logging noise
+      // console.log(`Syncing pair: ${pair.name} (${pair.address})`); 
       
       // Check if market already exists
       const { data: existingMarket, error: lookupError } = await supabase
         .from('markets')
-        .select('id, token_x_symbol, token_y_symbol, token_x_logo, token_y_logo')
+        // Select needed fields for comparison/merging
+        .select('id, token_x_symbol, token_y_symbol, token_x_logo, token_y_logo, tokens_old_enough') 
         .eq('public_key', pair.address)
-        .single();
+        .maybeSingle(); // Use maybeSingle to handle not found case gracefully
       
-      // Get token ages when syncing
-      const tokenXInfo = await getTokenInfo(pair.mint_x);
-      const tokenYInfo = await getTokenInfo(pair.mint_y);
-      
+      if (lookupError && lookupError.code !== 'PGRST116') { // Ignore 'not found' error
+         console.error(`Error looking up existing market ${pair.address}:`, lookupError);
+         // Decide if you want to skip or continue with default values
+         // return; // Example: skip on lookup error
+      }
+
+      // Get token info from the pre-fetched map
+      const tokenXInfo = tokenInfoMap[pair.mint_x] ?? null;
+      const tokenYInfo = tokenInfoMap[pair.mint_y] ?? null;
+
+      // Check token ages using the fetched info
       const isTokenXOldEnough = isTokenOldEnough(tokenXInfo?.created_at);
       const isTokenYOldEnough = isTokenOldEnough(tokenYInfo?.created_at);
-      
+      const tokensAreOldEnough = isTokenXOldEnough && isTokenYOldEnough;
+
+      // Only proceed with sync if tokens are old enough or if it's already marked as such
+      // This prevents adding new, potentially risky pairs immediately
+      // Also consider if you *always* want to update existing pairs regardless of age
+      const shouldSync = tokensAreOldEnough || (existingMarket?.tokens_old_enough === true);
+
+      if (!shouldSync) {
+          // Optionally log skipped pairs
+          // console.log(`Skipping pair ${pair.name} (${pair.address}) due to new token(s).`);
+          // Optionally delete if it exists but tokens are no longer old enough (edge case)
+          // if (existingMarket) { await supabase.from('markets').delete().eq('id', existingMarket.id); }
+          return; 
+      }
+
       const marketData = {
         name: pair.name,
         public_key: pair.address,
-        address: pair.address,
+        address: pair.address, // Keep both for potential compatibility
         mint_x: pair.mint_x,
         mint_y: pair.mint_y,
         token_x_mint: pair.mint_x,
@@ -250,7 +293,7 @@ export class MarketRepository {
         base_fee_percentage: pair.base_fee_percentage,
         max_fee_percentage: pair.max_fee_percentage,
         protocol_fee_percentage: pair.protocol_fee_percentage,
-        liquidity: pair.liquidity,
+        liquidity: String(pair.liquidity), // Ensure liquidity is stored as text if needed by schema, else parseFloat
         fees_24h: pair.fees_24h,
         today_fees: pair.today_fees,
         trade_volume_24h: pair.trade_volume_24h,
@@ -260,45 +303,44 @@ export class MarketRepository {
         apr: pair.apr,
         apy: pair.apy,
         is_blacklisted: pair.is_blacklisted,
-        fee_volume_ratios: pair.fee_tvl_ratio,
+        // Rename columns to avoid conflicts if needed, ensure JSONB types in Supabase
+        fee_volume_ratios: pair.fee_tvl_ratio, 
         fees_by_timeframe: pair.fees,
         volume_by_timeframe: pair.volume,
         tags: pair.tags,
         last_updated: new Date().toISOString(),
-        
-        // Maintain compatibility with your existing schema
+
+        // Compatibility fields - ensure types match Supabase schema
         base_fee: pair.base_fee_percentage + '%',
         daily_apr: pair.apr,
-        tvl: parseFloat(pair.liquidity),
-        volume_tvl_ratio: pair.fee_tvl_ratio.hour_24,
+        tvl: parseFloat(String(pair.liquidity)), // Parse liquidity string to float for TVL
+        volume_tvl_ratio: pair.fee_tvl_ratio?.hour_24 ?? 0, // Use safe access
         risk: this.calculateRiskLevel(pair),
-        
-        // Keep any token metadata if already available
-        token_x_symbol: existingMarket?.token_x_symbol || null,
-        token_y_symbol: existingMarket?.token_y_symbol || null,
-        token_x_logo: existingMarket?.token_x_logo || null,
-        token_y_logo: existingMarket?.token_y_logo || null,
-        
+
+        // Use fetched token info, falling back to existing data or null
+        token_x_symbol: tokenXInfo?.symbol ?? existingMarket?.token_x_symbol ?? null,
+        token_y_symbol: tokenYInfo?.symbol ?? existingMarket?.token_y_symbol ?? null,
+        token_x_logo: tokenXInfo?.logoURI ?? existingMarket?.token_x_logo ?? null,
+        token_y_logo: tokenYInfo?.logoURI ?? existingMarket?.token_y_logo ?? null,
+
         // Add token age information
-        token_x_created_at: tokenXInfo?.created_at || null,
-        token_y_created_at: tokenYInfo?.created_at || null,
-        tokens_old_enough: isTokenXOldEnough && isTokenYOldEnough
+        token_x_created_at: tokenXInfo?.created_at ?? null,
+        token_y_created_at: tokenYInfo?.created_at ?? null,
+        tokens_old_enough: tokensAreOldEnough // Use calculated value
       };
-      
-      if (existingMarket) {
-        // Update existing market (faster)
-        await supabase
-          .from('markets')
-          .update(marketData)
-          .eq('id', existingMarket.id);
-      } else {
-        // Insert new market (less common over time)
-        await supabase
-          .from('markets')
-          .insert(marketData);
+
+      // Use upsert for cleaner insert/update logic
+      const { error: upsertError } = await supabase
+         .from('markets')
+         .upsert(marketData, { onConflict: 'public_key', ignoreDuplicates: false }); // Upsert based on public_key constraint
+
+
+      if (upsertError) {
+         console.error(`Error upserting pair ${pair.name} (${pair.address}):`, upsertError);
       }
+
     } catch (error) {
-      console.error(`Error syncing pair ${pair.name} to Supabase:`, error);
+      console.error(`Unhandled error syncing pair ${pair.name} to Supabase:`, error);
     }
   }
   
