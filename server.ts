@@ -360,25 +360,34 @@ app.post('/api/markets/select', async (req, res) => {
     
     // Pass the dollarAmount parameter to createPositionInSelectedMarket
     // If not provided, it will use the default value in the method
-    await marketSelector.createPositionInSelectedMarket(
+    const creationStatus = await marketSelector.createPositionInSelectedMarket(
       dlmm, 
       chosenMarket, 
       singleSidedX === undefined ? true : singleSidedX,
       dollarAmount // Pass the user-specified dollar amount
     );
     
-    res.json({ 
-      success: true, 
-      message: `Position created successfully in ${chosenMarket.name}`,
-      market: chosenMarket.name,
-      side: singleSidedX ? 'Token X' : 'Token Y',
-      amount: `$${dollarAmount || chosenMarket.defaultDollarAmount || 1}`
-    });
+    if (creationStatus.success) {
+        res.json({
+          success: true,
+          message: creationStatus.message,
+          positionKey: creationStatus.positionKey, // Optionally return the new key
+          market: chosenMarket.name,
+          side: singleSidedX ? 'Token X' : 'Token Y',
+          amount: `$${dollarAmount || chosenMarket.defaultDollarAmount || 1}` // Amount might be slightly different due to safetyFactor
+        });
+    } else {
+        // If creation failed (on-chain or saving)
+        res.status(500).json({
+          success: false,
+          error: creationStatus.message // Return the error message from the creation process
+        });
+    }
   } catch (error) {
-    console.error('Error creating position in market:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error'
+    console.error('Error processing /api/markets/select:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown server error'
     });
   }
 });

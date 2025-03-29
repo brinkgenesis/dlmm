@@ -15,6 +15,7 @@ import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { getTokenPricesJupiter, getTokenPriceJupiter } from './utils/fetchPriceJupiter';
 import { withSafeKeypair } from './utils/walletHelper';
 import { MarketRepository } from './services/marketRepository';
+import { PositionRepository } from './services/positionRepository';
 
 interface MarketInfo {
   name: string;
@@ -34,6 +35,16 @@ interface MarketInfo {
   tokenYSymbol?: string;
 }
 
+// Define the expected return type from createSingleSidePosition
+type CreatePositionResult = {
+    positionKey: PublicKey;
+    minBinId: number;
+    maxBinId: number;
+    originalActiveBin: number;
+    startingValue: number;
+    txSignature: string;
+};
+
 export class MarketSelector {
   public markets: MarketInfo[] = [];
   private connection: Connection;
@@ -41,6 +52,7 @@ export class MarketSelector {
   private positionStorage: PositionStorage;
   private config: Config;
   private marketRepository: MarketRepository;
+  private positionRepository: PositionRepository;
   private supabaseEnabled: boolean = true;
   
   constructor(
@@ -54,6 +66,7 @@ export class MarketSelector {
     this.positionStorage = positionStorage;
     this.config = config;
     this.marketRepository = new MarketRepository();
+    this.positionRepository = new PositionRepository();
     
     // If Supabase is enabled, try to load markets from there
     if (this.supabaseEnabled) {
@@ -203,7 +216,7 @@ export class MarketSelector {
     chosenMarket: MarketInfo,
     singleSidedX: boolean,
     userDollarAmount?: number
-  ): Promise<void> {
+  ): Promise<{ success: boolean, positionKey: string, message: string }> {
     try {
       // Use user-provided amount if present, otherwise use default or fall back to 1
       const dollarAmount = 
@@ -294,35 +307,99 @@ export class MarketSelector {
       const tokenAmount = newBalance * safetyFactor;
 
       // Convert to lamports
-      const tokenDecimals = await getTokenDecimals(this.connection, targetTokenMint);
+      const tokenDecimals = singleSidedX ? dlmm.tokenX.decimal : dlmm.tokenY.decimal; // Get correct decimals
       console.log(`Token decimals: ${tokenDecimals}`);
       const tokenAmountLamports = Math.floor(tokenAmount * Math.pow(10, tokenDecimals));
       const tokenAmountBN = new BN(tokenAmountLamports.toString());
 
       console.log(`Using ${tokenAmount.toFixed(6)} tokens (${tokenAmountLamports} lamports) for position creation`);
       
-      // Call your existing createSingleSidePosition function with withSafeKeypair
-      await withSafeKeypair(this.config, async (keypair) => {
-        // Generate a new keypair for the position itself
-        const positionKeypair = Keypair.generate();
-        console.log(`Generated new keypair for position: ${positionKeypair.publicKey.toString()}`);
+      let finalPositionKey: string | null = null;
+      let errorMessage: string | null = null;
 
-        // Call the on-chain function correctly
-        return createSingleSidePosition(
-          this.connection,
-          dlmm,
-          keypair, // This is the wallet keypair for fee payment
-          positionKeypair, // This is the keypair for the new position
-          tokenAmountBN,
-          singleSidedX
-          // positionStorage argument removed
-        );
+      await withSafeKeypair(this.config, async (keypair) => {
+        try {
+          const positionKeypair = Keypair.generate();
+          console.log(`Generated new keypair for position: ${positionKeypair.publicKey.toString()}`);
+
+          const creationResult: CreatePositionResult = await createSingleSidePosition(
+            this.connection,
+            dlmm,
+            keypair,
+            positionKeypair,
+            tokenAmountBN,
+            singleSidedX
+          );
+
+          if (!creationResult || !creationResult.positionKey) {
+            throw new Error("On-chain position creation failed or did not return expected data.");
+          }
+
+          console.log(`On-chain position created: ${creationResult.positionKey.toBase58()}, Tx: ${creationResult.txSignature}`);
+          console.log(`Calculated Starting Value: $${creationResult.startingValue.toFixed(2)}`);
+
+          console.log(`Saving new position ${creationResult.positionKey.toBase58()} to database...`);
+
+          const initialPositionData = {
+            poolAddress: dlmm.pubkey.toBase58(),
+            tokenXMint: dlmm.tokenX.publicKey.toBase58(),
+            tokenYMint: dlmm.tokenY.publicKey.toBase58(),
+            tokenXSymbol: chosenMarket.tokenXSymbol,
+            tokenYSymbol: chosenMarket.tokenYSymbol,
+            tokenXLogo: chosenMarket.tokenXLogo,
+            tokenYLogo: chosenMarket.tokenYLogo,
+            originalActiveBin: creationResult.originalActiveBin,
+            minBinId: creationResult.minBinId,
+            maxBinId: creationResult.maxBinId,
+            startingPositionValue: creationResult.startingValue,
+            snapshotPositionValue: creationResult.startingValue,
+            currentValue: creationResult.startingValue,
+            originalStartDate: new Date().toISOString(),
+            rebalanceCount: 0,
+            pending_fee_x: '0',
+            pending_fee_y: '0',
+            pending_fees_usd: 0,
+            total_claimed_fee_x: '0',
+            total_claimed_fee_y: '0',
+            total_fee_usd_claimed: 0,
+            feeHistory: [],
+          };
+
+          await this.positionRepository.syncPosition(
+            creationResult.positionKey.toBase58(),
+            initialPositionData
+          );
+
+          console.log(`Position ${creationResult.positionKey.toBase58()} saved to database successfully.`);
+
+          finalPositionKey = creationResult.positionKey.toBase58();
+        } catch (innerError) {
+          console.error("Error during position creation/saving inside keypair scope:", innerError);
+          errorMessage = innerError instanceof Error ? innerError.message : String(innerError);
+        }
       });
-      
-      console.log(`Position creation completed in ${chosenMarket.name}`);
-    } catch (error) {
-      console.error(`Error creating position in ${chosenMarket.name}:`, error);
-      throw error;
+
+      if (errorMessage) {
+        return { success: false, positionKey: '', message: errorMessage };
+      }
+
+      if (finalPositionKey) {
+        return {
+          success: true,
+          positionKey: finalPositionKey,
+          message: `Position creation completed successfully in ${chosenMarket.name}`
+        };
+      } else {
+        return { success: false, positionKey: '', message: 'Position creation process completed without success or error.' };
+      }
+
+    } catch (outerError) {
+      console.error(`Error creating position in ${chosenMarket.name}:`, outerError);
+      return {
+        success: false,
+        positionKey: '',
+        message: outerError instanceof Error ? outerError.message : 'Unknown error during position creation setup'
+      };
     }
   }
 
@@ -412,13 +489,13 @@ if (require.main === module) {
       
       // Create the position
       console.log(`Creating position with ${singleSidedChoice ? 'Token X' : 'Token Y'}...`);
-      await marketSelector.createPositionInSelectedMarket(
+      const result = await marketSelector.createPositionInSelectedMarket(
         dlmm, 
         chosenMarket, 
         singleSidedChoice
       );
       
-      console.log('Position creation complete!');
+      console.log(result.message);
       
     } catch (error) {
       console.error('Error in market selection process:', error);
