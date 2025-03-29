@@ -35,8 +35,16 @@ async function migrate() {
   
   if (fs.existsSync(positionsPath)) {
     const positionsData = JSON.parse(fs.readFileSync(positionsPath, 'utf-8'));
-    await positionRepo.syncAllPositions(positionsData);
-    console.log(`Migrated ${Object.keys(positionsData).length} positions`);
+    console.log(`Starting migration of ${Object.keys(positionsData).length} positions...`);
+    for (const [positionKey, positionDetails] of Object.entries(positionsData)) {
+        try {
+            await positionRepo.syncPosition(positionKey, positionDetails);
+            console.log(`  Migrated position: ${positionKey}`);
+        } catch (error) {
+            console.error(`  Error migrating position ${positionKey}:`, error);
+        }
+    }
+    console.log(`Finished migrating positions.`);
   } else {
     console.log(`No positions file found at ${positionsPath}`);
   }

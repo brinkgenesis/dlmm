@@ -3,65 +3,54 @@ import path from 'path';
 import { PublicKey } from '@solana/web3.js';
 import { Config } from '../models/Config';
 import { PositionRepository } from '../services/positionRepository';
+import { Decimal } from 'decimal.js'; // Ensure Decimal is imported
 
+// Interface for basic position data stored locally or fetched
+// Removed FeeSnapshot and related fields
 interface PositionRange {
   originalActiveBin: number;
   minBinId: number;
   maxBinId: number;
-  snapshotPositionValue: number;
+  snapshotPositionValue: number; // Value at creation/rebalance
 }
 
-// Extend the PositionFeeData interface with fee history
-interface FeeSnapshot {
-  timestamp: number;
-  feesUSD: number;
-  positionValue: number;
-}
+// Remove PositionFeeData interface as it's no longer needed
+// interface PositionFeeData extends PositionRange { ... }
 
-// Extended interface to track fee data for APR calculations
-interface PositionFeeData extends PositionRange {
-  // Timestamp when fees were last recorded
-  lastFeeTimestamp?: number; // Unix timestamp in milliseconds
-  
-  // Last recorded fee amounts
-  lastFeeX?: string;
-  lastFeeY?: string;
-  
-  // Last recorded USD value of fees
-  lastFeesUSD?: number;
-  
-  // Position value at last fee recording
-  lastPositionValue?: number;
-  
-  // Calculated APR (if available)
-  dailyAPR?: number;
-  
-  // Add fee history for moving average
-  feeHistory?: FeeSnapshot[];
-}
+// Remove PositionsMapping as it used PositionFeeData
+// interface PositionsMapping { ... }
 
-interface PositionsMapping {
-  [positionPubKey: string]: PositionFeeData;
-}
 
-// Add startingPositionValue to the interface
-export interface PositionData {
-  originalActiveBin: number;
+// Updated interface for data needed when adding/updating a position in storage
+// Removed fields related to snapshot APR calculation:
+// dailyAPR, lastFeeTimestamp, feeHistory, lastFeeX, lastFeeY, lastFeesUSD, lastPositionValue
+interface PositionStorageData {
+  originalActiveBin: number; // Bin ID at time of creation/rebalance
   minBinId: number;
   maxBinId: number;
-  snapshotPositionValue: number;
-  startingPositionValue?: number;
-  dailyAPR?: number;
-  lastFeeTimestamp?: number;
-  originalStartDate?: number;
+  snapshotPositionValue: number; // Value at time of creation/rebalance (for drawdown)
+  currentValue?: number; // Current value (updated frequently, maybe from dashboard calc)
+  startingPositionValue?: number; // The VERY original value (persistent)
+  originalStartDate?: number; // The VERY original date (persistent)
   rebalanceCount?: number;
-  previousPositionKey?: string;
-  feeHistory?: FeeSnapshot[];
-  lastFeeX?: string;
-  lastFeeY?: string;
-  lastFeesUSD?: number;
-  lastPositionValue?: number;
   poolAddress?: string;
+  // Accumulated claimed fees (passed during transfer)
+  totalClaimedFeeX?: string;
+  totalClaimedFeeY?: string;
+  totalFeeUsdClaimed?: number;
+  // Optional fields loaded from DB or calculated elsewhere
+  previousPositionKey?: string;
+  tokenXMint?: string;
+  tokenYMint?: string;
+  // --- REMOVED ---
+  // dailyAPR?: number;
+  // lastFeeTimestamp?: number;
+  // feeHistory?: FeeSnapshot[];
+  // lastFeeX?: string; // Pending raw X
+  // lastFeeY?: string; // Pending raw Y
+  // lastFeesUSD?: number; // Pending USD
+  // lastPositionValue?: number; // Alias for currentValue
+  // --- END REMOVED ---
 }
 
 /**
@@ -69,16 +58,19 @@ export interface PositionData {
  */
 export class PositionStorage {
   private filePath: string;
-  private positions: { [positionPubKey: string]: PositionData } = {};
+  // Use PositionStorageData for the internal cache type
+  private positions: { [positionPubKey: string]: PositionStorageData } = {};
   private positionRepository: PositionRepository;
   private supabaseEnabled: boolean = true; // Flag to enable/disable Supabase integration
+  private config: Config; // Store config
 
   /**
    * Constructs a new PositionStorage instance.
    * @param config - The configuration object containing necessary settings.
    * @param fileName - The name of the file to store positions.
    */
-  constructor(private config: Config, fileName: string = 'positions.json') {
+  constructor(config: Config, fileName: string = 'positions.json') {
+    this.config = config; // Assign config
     this.filePath = path.resolve(this.config.dataDirectory, fileName);
     this.positionRepository = new PositionRepository();
     this.load();
@@ -93,10 +85,10 @@ export class PositionStorage {
       if (this.supabaseEnabled) {
         try {
           const supabasePositions = await this.positionRepository.loadPositions();
-          
+
           // Use Supabase as the only source of truth
           this.positions = supabasePositions;
-          
+
           console.log(`Loaded ${Object.keys(this.positions).length} positions from Supabase`);
           return;
         } catch (error) {
@@ -121,63 +113,43 @@ export class PositionStorage {
   }
 
   /**
-   * Saves the current positions mapping to the JSON file and Supabase.
-   */
-  private save(): void {
-    try {
-      // Skip file saving completely
-      
-      // If Supabase is enabled, sync all data there
-      if (this.supabaseEnabled) {
-        this.positionRepository.syncAllPositions(this.positions)
-          .catch(error => console.error('Error syncing positions to Supabase:', error));
-      }
-    } catch (error: any) {
-      console.error('Error saving positions:', error.message || error);
-    }
-  }
-
-  /**
-   * Adds a new position with its bin ranges.
-   * @param positionKey - The public key of the position.
-   * @param data - The position data.
+   * Adds or updates a position in local storage and syncs to DB.
+   * Handles both new positions and updates after rebalancing.
    */
   public addPosition(
-    positionKey: PublicKey, 
-    data: {
-      originalActiveBin: number;
-      minBinId: number;
-      maxBinId: number;
-      snapshotPositionValue: number;
-      startingPositionValue?: number;
-      originalStartDate?: number;
-      rebalanceCount?: number;
-      poolAddress?: string;
-    }
+    positionKey: PublicKey,
+    data: PositionStorageData
   ): void {
     const positionId = positionKey.toString();
-    
-    // Use snapshotPositionValue as the starting value if not explicitly provided
-    const positionData: PositionData = {
+
+    // Determine persistent values (only set initially or transferred)
+    const existingEntry = this.positions[positionId];
+    const startingValue = data.startingPositionValue ?? existingEntry?.startingPositionValue ?? data.snapshotPositionValue;
+    const startDate = data.originalStartDate ?? existingEntry?.originalStartDate ?? Date.now();
+
+    // Construct the full data, prioritizing incoming data but keeping history if needed
+    const positionData: PositionStorageData = {
+      // Removed references to feeHistory etc.
+      ...existingEntry,
       ...data,
-      startingPositionValue: data.startingPositionValue ?? data.snapshotPositionValue
+      startingPositionValue: startingValue,
+      originalStartDate: startDate,
+      // Ensure claimed fees are correctly assigned
+      totalClaimedFeeX: data.totalClaimedFeeX ?? existingEntry?.totalClaimedFeeX ?? '0',
+      totalClaimedFeeY: data.totalClaimedFeeY ?? existingEntry?.totalClaimedFeeY ?? '0',
+      totalFeeUsdClaimed: data.totalFeeUsdClaimed ?? existingEntry?.totalFeeUsdClaimed ?? 0,
     };
-    
+
+    // Update local cache
     this.positions[positionId] = positionData;
-    
-    // Don't call save() for local file anymore, sync directly with Supabase
+    console.log(`Added/Updated position ${positionId} in local storage. StartVal: ${startingValue}, SnapshotVal: ${positionData.snapshotPositionValue}, ClaimedUSD: ${positionData.totalFeeUsdClaimed}`);
+
+    // Sync to Supabase
     if (this.supabaseEnabled) {
-      this.positionRepository.syncPosition(positionId, positionData)
-        .catch(error => console.error(`Error syncing position ${positionId} to Supabase:`, error));
-      
-      // If pool address is available, use the enhanced sync method
-      if (data.poolAddress) {
-        this.positionRepository.syncPositionWithMarketData(
-          positionId, 
-          positionData,
-          data.poolAddress
-        ).catch(error => console.error(`Error syncing position to Supabase:`, error));
-      }
+      this.positionRepository.syncPosition(
+        positionId,
+        positionData // Pass the complete, merged data
+      ).catch(error => console.error(`Error syncing position ${positionId} to Supabase:`, error));
     }
   }
 
@@ -186,7 +158,7 @@ export class PositionStorage {
    * @param positionPubKey - The public key of the position.
    * @returns The bin range details or undefined if not found.
    */
-  public getPositionRange(positionPubKey: PublicKey): PositionData | undefined {
+  public getPositionRange(positionPubKey: PublicKey): PositionStorageData | undefined {
     return this.positions[positionPubKey.toBase58()];
   }
 
@@ -194,322 +166,121 @@ export class PositionStorage {
    * Retrieves all stored position mappings.
    * @returns The complete positions mapping.
    */
-  public getAllPositions(): PositionsMapping {
+  public getAllPositions(): { [positionPubKey: string]: PositionStorageData } { // Update return type
     return this.positions;
   }
 
   /**
-   * Removes a position from the storage.
-   * @param positionPubKey - The public key of the position.
+   * Removes position from local cache AND database.
    */
-  public removePosition(positionPubKey: PublicKey): void {
+  public async removePosition(positionPubKey: PublicKey): Promise<void> {
     const positionKey = positionPubKey.toBase58();
-    delete this.positions[positionKey];
-    
-    // Also remove from Supabase if enabled
-    if (this.supabaseEnabled) {
-      this.positionRepository.removePosition(positionKey)
-        .catch(error => console.error(`Error removing position ${positionKey} from Supabase:`, error));
-    }
-    
-    this.save();
-  }
-
-  /**
-   * Updates fee data for APR calculations for a specific position
-   * @param positionPubKey - The public key of the position
-   * @param feeData - The fee data to update
-   * @param poolAddress - The pool address associated with the position
-   */
-  public updatePositionFeeData(
-    positionPubKey: PublicKey, 
-    feeData: {
-      feeX: string;
-      feeY: string;
-      feesUSD: number;
-      positionValue: number;
-      timestamp: number;
-    },
-    poolAddress?: string
-  ): void {
-    const positionKey = positionPubKey.toBase58();
-    let position = this.positions[positionKey];
-    
-    if (!position) {
-      console.log(`Position ${positionKey} not found in storage`);
-      return;
-    }
-    
-    // Create new snapshot
-    const newSnapshot: FeeSnapshot = {
-      timestamp: feeData.timestamp,
-      feesUSD: feeData.feesUSD,
-      positionValue: feeData.positionValue
-    };
-    
-    // Check for fee claim event (significant fee decrease)
-    let feeClaimDetected = false;
-    if (position.lastFeesUSD && position.lastFeesUSD > 0) {
-      // If current fees are much lower than last recorded fees, 
-      // it likely means fees were claimed
-      if (feeData.feesUSD < position.lastFeesUSD * 0.8) { // 20% drop threshold
-        console.log(`Fee claim detected for position ${positionKey}: ${position.lastFeesUSD.toFixed(4)} → ${feeData.feesUSD.toFixed(4)}`);
-        feeClaimDetected = true;
-      }
-    }
-    
-    // Also check for very low fee amounts (another indicator of claiming or reset)
-    const minimumFeeThreshold = 0.0001; // $0.0001 - reduced from 0.05 to allow low fee positions
-    if (feeData.feesUSD < minimumFeeThreshold) {
-      console.log(`Low fee amount detected (${feeData.feesUSD.toFixed(4)} < ${minimumFeeThreshold}) - possible fee claim`);
-      feeClaimDetected = true;
-    }
-    
-    // Reset history if fees were claimed
-    if (feeClaimDetected) {
-      // Only reset if this isn't a brand new position (allow at least 1 hour to accumulate fees)
-      const hasExistingHistory = position.feeHistory && position.feeHistory.length > 0;
-      const oldestSnapshot = hasExistingHistory && position.feeHistory ? position.feeHistory[0] : null;
-      const isNewPosition = oldestSnapshot && (feeData.timestamp - oldestSnapshot.timestamp < 60 * 60 * 1000); // 1 hour
-      
-      if (isNewPosition) {
-        console.log(`Low fees detected but position is new (< 1 hour), preserving history`);
-        // Add new snapshot without resetting
-        if (!position.feeHistory) {
-          position.feeHistory = [newSnapshot];
-        } else {
-          position.feeHistory.push(newSnapshot);
-          if (position.feeHistory.length > 24) {
-            position.feeHistory.shift(); // Remove oldest
-          }
-        }
-      } else {
-        console.log(`Resetting fee history for position ${positionKey} due to likely fee claim`);
-        position.feeHistory = [newSnapshot]; // Start fresh
-      }
+    if (this.positions[positionKey]) {
+        delete this.positions[positionKey];
+        console.log(`Removed position ${positionKey} from local storage.`);
     } else {
-      // Normal update - initialize or update fee history
-      if (!position.feeHistory) {
-        position.feeHistory = [newSnapshot];
-      } else {
-        // Add new snapshot, limit to last 24 snapshots
-        position.feeHistory.push(newSnapshot);
-        if (position.feeHistory.length > 24) {
-          position.feeHistory.shift(); // Remove oldest
-        }
-      }
+        console.warn(`Attempted to remove position ${positionKey} not found in local storage.`);
     }
-    
-    // Only calculate APR if we have at least 2 snapshots and no fee claim
-    let dailyAPR: number | undefined = undefined;
-    
-    if (position.feeHistory.length >= 2 && !feeClaimDetected) {
-      // Get the oldest and newest snapshots
-      const oldestSnapshot = position.feeHistory[0];
-      const newestSnapshot = position.feeHistory[position.feeHistory.length - 1];
-      
-      // Calculate time difference in minutes
-      const timeDiffMinutes = (newestSnapshot.timestamp - oldestSnapshot.timestamp) / (1000 * 60);
-      
-      if (timeDiffMinutes > 15) { // Minimum 15 minutes for calculation
-        // Calculate fee difference
-        const feeDiff = newestSnapshot.feesUSD - oldestSnapshot.feesUSD;
-        
-        // Only calculate if fees increased (this is a safety check)
-        if (feeDiff > 0) {
-          // Project to daily rate (1440 minutes in a day)
-          const projectedDailyFees = feeDiff * (1440 / timeDiffMinutes);
-          
-          // Use average position value
-          const avgPositionValue = position.feeHistory.reduce((sum, snapshot) => 
-            sum + snapshot.positionValue, 0) / position.feeHistory.length;
-          
-          // Calculate daily APR as percentage
-          dailyAPR = (projectedDailyFees / avgPositionValue) * 100;
-          
-          // Apply reasonable cap (e.g., 50% daily APR)
-          if (dailyAPR > 50) {
-            console.log(`Capping calculated APR from ${dailyAPR.toFixed(2)}% to 50%`);
-            dailyAPR = 50;
-          }
-          
-          console.log(`Calculated daily APR for ${positionKey} using ${position.feeHistory.length} snapshots over ${Math.round(timeDiffMinutes)} minutes: ${dailyAPR.toFixed(2)}%`);
-        } else {
-          console.log(`No fee increase detected for position ${positionKey}: ${feeDiff.toFixed(4)}`);
-        }
-      } else {
-        console.log(`Not enough time elapsed for reliable APR calculation (${Math.round(timeDiffMinutes)} minutes)`);
-      }
-    }
-    
-    // Update position data
-    this.positions[positionKey] = {
-      ...position,
-      lastFeeTimestamp: feeData.timestamp,
-      lastFeeX: feeData.feeX,
-      lastFeeY: feeData.feeY,
-      lastFeesUSD: feeData.feesUSD,
-      lastPositionValue: feeData.positionValue,
-      ...(dailyAPR !== undefined ? { dailyAPR } : {}),
-      feeHistory: position.feeHistory // Save history
-    };
-    
-    // If Supabase is enabled and poolAddress is provided, use the enhanced sync
-    if (this.supabaseEnabled && poolAddress) {
-      this.positionRepository.syncPositionWithMarketData(
-        positionKey, 
-        this.positions[positionKey],
-        poolAddress
-      ).catch(error => console.error(`Error syncing position to Supabase:`, error));
-    } else if (this.supabaseEnabled) {
-      // Fall back to regular sync if no pool address
-      this.positionRepository.syncPosition(
-        positionKey, 
-        this.positions[positionKey]
-      ).catch(error => console.error(`Error syncing position to Supabase:`, error));
-    }
-    
-    this.save();
-  }
 
-  /**
-   * Gets APR data for a position
-   * @param positionPubKey - The public key of the position
-   * @returns APR data or undefined if not available
-   */
-  public getPositionAPRData(positionPubKey: PublicKey): {
-    dailyAPR?: number;
-    lastUpdated?: number;
-  } | undefined {
-    const position = this.positions[positionPubKey.toBase58()];
-    
-    if (!position) {
-      return undefined;
+    // Remove from database via repository
+    if (this.supabaseEnabled) {
+        await this.positionRepository.removePosition(positionKey);
     }
-    
-    return {
-      dailyAPR: position.dailyAPR,
-      lastUpdated: position.lastFeeTimestamp
-    };
   }
 
   /**
    * Cleans up the positions storage by removing any positions that don't exist on-chain
    * @param activePositionKeys - Array of position public keys currently active on-chain
    */
-  public cleanupStalePositions(activePositionKeys: PublicKey[]): void {
+  public async cleanupStalePositions(activePositionKeys: PublicKey[]): Promise<void> {
     console.log(`Cleaning up stale positions in storage...`);
     const activeKeyStrings = activePositionKeys.map(key => key.toString());
-    
+
     // Get all stored position keys
     const storedKeys = Object.keys(this.positions);
-    
+
     // Find keys that exist in storage but not on-chain
     const staleKeys = storedKeys.filter(key => !activeKeyStrings.includes(key));
-    
+
     // Remove stale positions
     if (staleKeys.length > 0) {
       console.log(`Found ${staleKeys.length} stale positions to remove`);
-      staleKeys.forEach(key => {
-        delete this.positions[key];
-        console.log(`Removed stale position: ${key}`);
-      });
-      
-      // Save the cleaned up positions
-      this.save();
+      for (const key of staleKeys) {
+        console.log(`Removing stale position: ${key}`);
+        // Use the new removePosition method which handles both local and DB
+        await this.removePosition(new PublicKey(key));
+      }
+      console.log('Stale positions cleanup complete.');
     } else {
       console.log(`No stale positions found`);
     }
   }
 
-  // Add method to get APR history
-  public getPositionAPRHistory(positionPubKey: PublicKey): {
-    history: FeeSnapshot[];
-    aprCalculation: {
-      timeSpan: number; // minutes
-      feeChange: number;
-      dailyProjection: number;
-    };
-  } | undefined {
-    const position = this.positions[positionPubKey.toBase58()];
-    
-    if (!position || !position.feeHistory || position.feeHistory.length < 2) {
-      return undefined;
-    }
-    
-    const oldestSnapshot = position.feeHistory[0];
-    const newestSnapshot = position.feeHistory[position.feeHistory.length - 1];
-    const timeDiffMinutes = (newestSnapshot.timestamp - oldestSnapshot.timestamp) / (1000 * 60);
-    const feeChange = newestSnapshot.feesUSD - oldestSnapshot.feesUSD;
-    const dailyProjection = feeChange * (1440 / timeDiffMinutes);
-    
-    return {
-      history: position.feeHistory,
-      aprCalculation: {
-        timeSpan: timeDiffMinutes,
-        feeChange,
-        dailyProjection
-      }
-    };
-  }
-
   /**
-   * Transfers position history during rebalance instead of removing old position
-   * @param oldPositionPubKey - Original position being closed
-   * @param newPositionPubKey - New position being created
-   * @param newPositionData - Data for the new position
+   * Transfers history from the old position to the new one and updates storage.
+   * Assumes the new position is already created on-chain.
+   * Triggers DB sync for the new position.
    */
-  public transferPositionHistory(
-    oldPositionPubKey: PublicKey,
-    newPositionPubKey: PublicKey,
-    newPositionData: {
-      originalActiveBin: number;
-      minBinId: number;
-      maxBinId: number;
-      snapshotPositionValue: number;
-      poolAddress?: string;
-    }
-  ): void {
-    const oldPositionKey = oldPositionPubKey.toBase58();
-    const oldPosition = this.positions[oldPositionKey];
-    
-    if (!oldPosition) {
-      console.log(`Old position ${oldPositionKey} not found, creating new entry without history`);
-      this.addPosition(newPositionPubKey, newPositionData);
-      return;
-    }
-    
-    // Transfer history to new position
-    const newPositionKey = newPositionPubKey.toBase58();
-    this.positions[newPositionKey] = {
-      ...newPositionData,
-      // Preserve the original starting value
-      startingPositionValue: oldPosition.startingPositionValue,
-      // Preserve or set the original start date
-      originalStartDate: oldPosition.originalStartDate || Date.now(),
-      // Increment rebalance count
-      rebalanceCount: (oldPosition.rebalanceCount || 0) + 1,
-      // Reference to old position for tracking lineage
-      previousPositionKey: oldPositionKey,
-      // Transfer poolAddress from old position if not provided in new data
-      poolAddress: newPositionData.poolAddress || oldPosition.poolAddress
-    };
-    
-    console.log(`Transferred history from position ${oldPositionKey} to ${newPositionKey}`);
-    console.log(`Starting value preserved: ${oldPosition.startingPositionValue}`);
-    
-    // Remove old position entry
-    delete this.positions[oldPositionKey];
-    
-    console.log(`HISTORY TRANSFER - Details:
-      Old position: ${oldPositionKey}
-      New position: ${newPositionKey}
-      Starting value: ${oldPosition.startingPositionValue}
-      Original date: ${oldPosition.originalStartDate || Date.now()}
-      Rebalance count: ${(oldPosition.rebalanceCount || 0) + 1}
-    `);
-    
-    this.save();
-  }
+   public transferPositionHistory(
+     oldPositionPubKey: PublicKey,
+     newPositionPubKey: PublicKey,
+     newPositionSnapshotData: { // Data about the NEW position's state *now*
+       originalActiveBin: number;
+       minBinId: number;
+       maxBinId: number;
+       snapshotPositionValue: number; // Current value of the NEW position
+       poolAddress?: string;
+     },
+     accumulatedFees: { // Total fees accumulated up to point of closing OLD position
+       totalClaimedFeeX: string;
+       totalClaimedFeeY: string;
+       totalFeeUsdClaimed: number;
+     }
+   ): void {
+     const oldPositionKey = oldPositionPubKey.toBase58();
+     const oldPosition = this.positions[oldPositionKey]; // Get data from local cache
+
+     if (!oldPosition) {
+       console.warn(`Old position ${oldPositionKey} not found in local storage for history transfer. Creating new entry.`);
+       // Create a new entry using addPosition, treating it as a fresh start but with claimed fees
+       this.addPosition(newPositionPubKey, {
+         ...newPositionSnapshotData,
+         startingPositionValue: newPositionSnapshotData.snapshotPositionValue, // Use current value as starting point
+         originalStartDate: Date.now(),
+         rebalanceCount: 0,
+         totalClaimedFeeX: accumulatedFees.totalClaimedFeeX,
+         totalClaimedFeeY: accumulatedFees.totalClaimedFeeY,
+         totalFeeUsdClaimed: accumulatedFees.totalFeeUsdClaimed,
+       });
+       return;
+     }
+
+     // Prepare data for the new position entry, inheriting history
+     const newPositionDataForStorage: PositionStorageData = {
+       ...newPositionSnapshotData,
+       // Inherit persistent historical data
+       startingPositionValue: oldPosition.startingPositionValue,
+       originalStartDate: oldPosition.originalStartDate,
+       rebalanceCount: (oldPosition.rebalanceCount || 0) + 1,
+       // --- ADD MINTS ---
+       tokenXMint: oldPosition.tokenXMint, // Carry over mints
+       tokenYMint: oldPosition.tokenYMint, // Carry over mints
+       // --- END MINTS ---
+       // Store accumulated claimed fees
+       totalClaimedFeeX: accumulatedFees.totalClaimedFeeX,
+       totalClaimedFeeY: accumulatedFees.totalClaimedFeeY,
+       totalFeeUsdClaimed: accumulatedFees.totalFeeUsdClaimed,
+       previousPositionKey: oldPositionKey, // Link lineage
+     };
+
+     // Use addPosition to create/update the new position's entry (triggers DB sync)
+     this.addPosition(newPositionPubKey, newPositionDataForStorage);
+
+     console.log(`Transferred history from ${oldPositionKey} to ${newPositionPubKey.toString()}.`);
+     console.log(`  Original Start Value: ${newPositionDataForStorage.startingPositionValue?.toFixed(4)}`);
+     console.log(`  New Snapshot Value: ${newPositionDataForStorage.snapshotPositionValue.toFixed(4)}`);
+     console.log(`  Accumulated Claimed Fees (USD): ${newPositionDataForStorage.totalFeeUsdClaimed?.toFixed(4)}`);
+     console.log(`  Rebalance Count: ${newPositionDataForStorage.rebalanceCount}`);
+   }
 }
 

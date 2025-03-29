@@ -433,10 +433,10 @@ export class RiskManager {
         
         // Only remove from storage if this is a permanent closure, not a rebalance
         if (isPermanentClosure) {
-          this.positionStorage.removePosition(position.publicKey);
-          console.log(`Removed position ${position.publicKey.toBase58()} from storage (permanent closure)`);
+          await this.positionStorage.removePosition(position.lbPairPositionsData[0].publicKey);
+          console.log(`Removed position ${position.lbPairPositionsData[0].publicKey.toBase58()} from storage (permanent closure)`);
         } else {
-          console.log(`Position ${position.publicKey.toBase58()} closed but history preserved for rebalancing`);
+          console.log(`Position ${position.lbPairPositionsData[0].publicKey.toBase58()} closed but history preserved for rebalancing`);
         }
         
       } catch (error) {
@@ -564,69 +564,76 @@ export class RiskManager {
   /**
    * Synchronizes the stored positions with the actual positions on-chain.
    * Removes any positions from storage that no longer exist.
+   * Adds any new positions found on-chain to storage.
    */
   public async syncPositionsWithChain(): Promise<void> {
     try {
       console.log('Synchronizing stored positions with on-chain data...');
-      
-      // Get all positions from storage
-      const storedPositions = this.positionStorage.getAllPositions();
-      const storedPositionKeys = Object.keys(storedPositions);
-      console.log(`Found ${storedPositionKeys.length} positions in storage`);
-      
+
       // Get all positions from chain
       const positionsMap = await this.getUserPositions();
       const activePositions = Array.from(positionsMap.values());
-      const activePositionKeys = activePositions.map(pos => 
-        pos.publicKey.toString()
-      );
+
+      // Extract all active LbPosition public keys
+      const activePositionKeys: PublicKey[] = [];
+      activePositions.forEach(posInfo => {
+          posInfo.lbPairPositionsData.forEach(lbPos => {
+              activePositionKeys.push(lbPos.publicKey);
+          });
+      });
       console.log(`Found ${activePositionKeys.length} active positions on-chain`);
-      
-      // Find positions that are in storage but not on-chain
-      const positionsToRemove = storedPositionKeys.filter(
-        key => !activePositionKeys.includes(key)
-      );
-      
-      // Remove obsolete positions
-      if (positionsToRemove.length > 0) {
-        console.log(`Removing ${positionsToRemove.length} obsolete positions from storage:`);
-        positionsToRemove.forEach(key => {
-          console.log(`- Removing position: ${key}`);
-          this.positionStorage.removePosition(new PublicKey(key));
-        });
-        console.log('Position storage synchronized successfully');
-      } else {
-        console.log('No obsolete positions found in storage');
-      }
-      
+
+      // Call PositionStorage's cleanup method to handle removal of stale entries
+      await this.positionStorage.cleanupStalePositions(activePositionKeys);
+
       // Add any new positions that are on-chain but not in storage
-      const newPositions = activePositions.filter(
-        pos => !storedPositionKeys.includes(pos.publicKey.toString())
-      );
-      
-      if (newPositions.length > 0) {
-        console.log(`Adding ${newPositions.length} new positions to storage:`);
-        for (const position of newPositions) {
-          const positionValue = await this.calculatePositionValue(position);
-          console.log(`- Adding position: ${position.publicKey.toString()} with value: $${positionValue.toFixed(4)}`);
-          
-          // Get the position's bin range
-          const binIds = position.lbPairPositionsData[0].positionData.positionBinData.map(b => Number(b.binId));
-          const minBinId = Math.min(...binIds);
-          const maxBinId = Math.max(...binIds);
-          
-          this.positionStorage.addPosition(position.publicKey, {
-            originalActiveBin: 0, // We don't know this, but can set it to 0 or fetch it
-            minBinId,
-            maxBinId,
-            snapshotPositionValue: positionValue
+      const storedPositions = this.positionStorage.getAllPositions();
+      const storedPositionKeys = Object.keys(storedPositions);
+
+      const newLbPositions: LbPosition[] = [];
+      activePositions.forEach(posInfo => {
+          posInfo.lbPairPositionsData.forEach(lbPos => {
+              if (!storedPositionKeys.includes(lbPos.publicKey.toString())) {
+                  newLbPositions.push(lbPos);
+              }
+          });
+      });
+
+
+      if (newLbPositions.length > 0) {
+        console.log(`Adding ${newLbPositions.length} new positions to storage:`);
+        for (const lbPosition of newLbPositions) {
+          // Need PositionInfo to calculate value, find it back...
+           const positionInfo = activePositions.find(p => p.lbPairPositionsData.some(lp => lp.publicKey.equals(lbPosition.publicKey)));
+           if (!positionInfo) {
+               console.warn(`Could not find PositionInfo for new LbPosition ${lbPosition.publicKey.toString()}. Skipping add.`);
+               continue;
+           }
+
+          const positionValue = await this.calculatePositionValue(positionInfo);
+          console.log(`- Adding position: ${lbPosition.publicKey.toString()} with value: $${positionValue.toFixed(4)}`);
+
+          // Get the position's bin range and active bin
+          const dlmm = await this.getDLMMInstance(positionInfo.publicKey); // pool address
+          const activeBin = await dlmm.getActiveBin();
+
+          this.positionStorage.addPosition(lbPosition.publicKey, {
+            originalActiveBin: activeBin.binId, // Use current active bin as original
+            minBinId: lbPosition.positionData.lowerBinId,
+            maxBinId: lbPosition.positionData.upperBinId,
+            snapshotPositionValue: positionValue,
+            startingPositionValue: positionValue, // Set starting value for new positions
+            originalStartDate: Date.now(), // Set start date
+            tokenXMint: positionInfo.tokenX.publicKey.toString(),
+            tokenYMint: positionInfo.tokenY.publicKey.toString(),
+            poolAddress: positionInfo.publicKey.toString() // Add pool address too
           });
         }
         console.log('New positions added to storage');
       } else {
-        console.log('No new positions found on-chain');
+        console.log('No new positions found on-chain to add to storage');
       }
-      
+
     } catch (error) {
       console.error('Error synchronizing positions:', error);
     }

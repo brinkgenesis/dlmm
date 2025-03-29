@@ -6,26 +6,33 @@ import BN from 'bn.js';
 import { FetchPrice } from './utils/fetch_price';
 import { withSafeKeypair } from './utils/walletHelper';
 import fs from 'fs';
+import { Decimal } from 'decimal.js';
+import { PositionRepository } from './services/positionRepository';
+import { createSingleSidePosition } from './utils/createSingleSidePosition';
+import { getTokenPricesJupiter } from './utils/fetchPriceJupiter';
 
 export class RebalanceManager {
   private connection: Connection;
   private wallet: Keypair;
   private config: Config;
   private positionStorage: PositionStorage;
+  private positionRepository: PositionRepository;
   private lastRebalanceTime: Record<string, number> = {};
-  private COOLDOWN_PERIOD = .25 * 60 * 60 * 1000; // 1.5 hours in milliseconds
+  private COOLDOWN_PERIOD = 0.25 * 60 * 60 * 1000; // 15 mins cooldown? (was 1.5hr)
   private dlmmInstances: Map<string, DLMM> = new Map();
 
   constructor(
     connection: Connection,
     wallet: Keypair,
     config: Config,
-    positionStorage?: PositionStorage
+    positionStorage?: PositionStorage,
+    positionRepository?: PositionRepository
   ) {
     this.connection = connection;
     this.wallet = wallet;
     this.config = config;
     this.positionStorage = positionStorage || new PositionStorage(config);
+    this.positionRepository = positionRepository || new PositionRepository();
   }
 
   /**
@@ -69,131 +76,87 @@ export class RebalanceManager {
   public async checkAndRebalancePositions(): Promise<void> {
     try {
       console.log('Checking positions for rebalancing...');
-      
-      // Get all positions from chain
       const positionsMap = await this.getUserPositions();
-      const positions = Array.from(positionsMap.values());
-      
-      if (positions.length === 0) {
-        console.log('No positions found on-chain');
-        return;
-      }
-      
-      console.log(`Found ${positions.length} positions to check`);
-      
-      // Clean up stale positions in storage
       const activePositionKeys: PublicKey[] = [];
-      positions.forEach(position => {
-        position.lbPairPositionsData.forEach(lbPosition => {
-          activePositionKeys.push(lbPosition.publicKey);
-        });
-      });
-      this.positionStorage.cleanupStalePositions(activePositionKeys);
-      
-      // Group positions by pool address (still needed for DLMM instances)
-      const poolPositionsMap = new Map<string, PositionInfo[]>();
-      
-      for (const position of positions) {
-        const poolAddress = position.publicKey.toString();
-        
-        if (!poolPositionsMap.has(poolAddress)) {
-          poolPositionsMap.set(poolAddress, []);
-        }
-        poolPositionsMap.get(poolAddress)!.push(position);
+
+      if (positionsMap.size === 0) {
+          console.log('No positions found on-chain for this wallet.');
+          await this.positionStorage.cleanupStalePositions([]);
+          return;
       }
-      
-      // Process each position individually
-      for (const [poolAddressStr, poolPositions] of poolPositionsMap.entries()) {
+
+      // Group positions by pool address string first
+      const poolPositionsMap = new Map<string, LbPosition[]>();
+      for (const [poolAddressStr, posInfo] of positionsMap.entries()) {
+          const currentPositions = poolPositionsMap.get(poolAddressStr) || [];
+          posInfo.lbPairPositionsData.forEach(lbPos => {
+              currentPositions.push(lbPos);
+              activePositionKeys.push(lbPos.publicKey); // Collect active keys here
+          });
+          poolPositionsMap.set(poolAddressStr, currentPositions);
+      }
+
+      console.log(`Found ${activePositionKeys.length} active position(s) across ${poolPositionsMap.size} pool(s).`);
+
+      // Cleanup stale positions using keys found *on-chain*
+      // Ensure cleanup uses the correct method from PositionStorage
+      await this.positionStorage.cleanupStalePositions(activePositionKeys);
+
+      // Process positions pool by pool
+      // FIX: Iterate over the grouped map
+      for (const [poolAddressStr, lbPositionsInPool] of poolPositionsMap.entries()) {
         const poolAddress = new PublicKey(poolAddressStr);
         console.log(`\nChecking pool: ${poolAddressStr}`);
-        
-        // Get DLMM instance for this pool
-        const dlmm = await this.getDLMMInstance(poolAddress);
-        
-        // Get current active bin
+        const dlmm = await this.getDLMMInstance(poolAddress); // Get DLMM instance per pool
         const activeBin = await dlmm.getActiveBin();
         const activeBinId = activeBin.binId;
         console.log(`Pool ${poolAddressStr} - Active bin: ${activeBinId}`);
-        
-        // Check each position individually
-        for (const position of poolPositions) {
-          // For each LbPosition in this PositionInfo
-          for (const lbPosition of position.lbPairPositionsData) {
-            const positionKey = lbPosition.publicKey.toString();
-            
-            console.log(`\n==========================================`);
-            console.log(`Checking position ${positionKey} in pool ${poolAddressStr}`);
-            console.log(`Position details:`);
-            console.log(`  Pool address: ${poolAddressStr}`);
-            console.log(`  Position key: ${positionKey}`);
-            console.log(`  Lower bin: ${lbPosition.positionData.lowerBinId}`);
-            console.log(`  Upper bin: ${lbPosition.positionData.upperBinId}`);
-            console.log(`==========================================\n`);
-            
-            // Check position cooldown
-            const now = Date.now();
-            const lastRebalance = this.lastRebalanceTime[positionKey] || 0;
-            if (now - lastRebalance < this.COOLDOWN_PERIOD) {
-              console.log(`Skipping rebalance for position ${positionKey}, cooldown period not elapsed`);
+
+        for (const lbPosition of lbPositionsInPool) {
+           const positionKey = lbPosition.publicKey.toString();
+           console.log(`\n==========================================`);
+           console.log(`Checking position ${positionKey} in pool ${poolAddressStr}`);
+           console.log(`Position details:`);
+           console.log(`  Pool address: ${poolAddressStr}`);
+           console.log(`  Position key: ${positionKey}`);
+           console.log(`  Lower bin: ${lbPosition.positionData.lowerBinId}`);
+           console.log(`  Upper bin: ${lbPosition.positionData.upperBinId}`);
+           console.log(`==========================================\n`);
+
+           const now = Date.now();
+           const lastRebalance = this.lastRebalanceTime[positionKey] || 0;
+           if (now - lastRebalance < this.COOLDOWN_PERIOD) {
+             console.log(`Skipping rebalance check for position ${positionKey}, cooldown period not elapsed`);
+             continue;
+           }
+
+           const storedPosition = this.positionStorage.getPositionRange(lbPosition.publicKey);
+           if (!storedPosition) {
+              console.warn(`Position ${positionKey} found on-chain but not in local storage after sync/cleanup. Skipping check.`);
               continue;
-            }
-            
-            // Get stored position data from positions.json
-            const storedPosition = this.positionStorage.getPositionRange(lbPosition.publicKey);
-            
-            if (storedPosition) {
-              console.log(`Position ${positionKey} - Min: ${storedPosition.minBinId}, Max: ${storedPosition.maxBinId}`);
-              
-              // Check if active bin is outside position range
-              console.log(`Checking if bin ${activeBinId} is outside range [${storedPosition.minBinId}, ${storedPosition.maxBinId}]`);
-              console.log(`Condition check: ${activeBinId < storedPosition.minBinId || activeBinId > storedPosition.maxBinId}`);
-              
-              if (activeBinId < storedPosition.minBinId || activeBinId > storedPosition.maxBinId) {
+           }
+
+           if (activeBinId < storedPosition.minBinId || activeBinId > storedPosition.maxBinId) {
                 console.log(`⚠️ Range breach detected for position ${positionKey}`);
-                console.log(`Active bin ${activeBinId} is outside range [${storedPosition.minBinId}, ${storedPosition.maxBinId}]`);
-                
-                // Rebalance this specific position only
+                console.log(`   Active bin ${activeBinId} is outside stored range [${storedPosition.minBinId}, ${storedPosition.maxBinId}]`);
+
                 await this.closeAndRebalancePosition(dlmm, poolAddress, lbPosition);
-                
-                // Update last rebalance time for this position
+
                 this.lastRebalanceTime[positionKey] = now;
-              } else {
-                // Calculate how far through the range we are
+            } else {
                 const totalRange = storedPosition.maxBinId - storedPosition.minBinId;
                 const distanceFromMin = activeBinId - storedPosition.minBinId;
                 const percentageThroughRange = (distanceFromMin / totalRange) * 100;
                 
                 console.log(`Position ${positionKey} - ${percentageThroughRange.toFixed(2)}% through range`);
                 
-                // Check if we're approaching the edge of the range (70% threshold)
                 if (percentageThroughRange <= 30 || percentageThroughRange >= 70) {
                   console.log(`⚠️ Position ${positionKey} is approaching range edge (${percentageThroughRange.toFixed(2)}%)`);
                 }
-              }
-            } else {
-              console.log(`Position ${positionKey} not found in storage, adding it...`);
-              
-              // Create new position info
-              const newPositionInfo = {
-                originalActiveBin: activeBinId,
-                minBinId: lbPosition.positionData.lowerBinId,
-                maxBinId: lbPosition.positionData.upperBinId,
-                snapshotPositionValue: await this.calculatePositionValue(position)
-              };
-              
-              // Store the position
-              this.positionStorage.addPosition(
-                lbPosition.publicKey,
-                newPositionInfo
-              );
-              
-              console.log(`Added position to storage: Min: ${newPositionInfo.minBinId}, Max: ${newPositionInfo.maxBinId}`);
             }
-          }
         }
       }
-      
-      // At the end of checkAndRebalancePositions
+
       console.log(`Rebalance check completed at ${new Date().toISOString()}`);
       fs.writeFileSync('./last_rebalance_check.txt', new Date().toISOString());
     } catch (error) {
@@ -209,323 +172,218 @@ export class RebalanceManager {
     poolAddress: PublicKey, 
     lbPosition: LbPosition
   ): Promise<void> {
+    const oldPositionKey = lbPosition.publicKey;
+    const oldPositionKeyStr = oldPositionKey.toString();
+    console.log(`Rebalancing position ${oldPositionKeyStr}...`);
+
     try {
-      const positionKey = lbPosition.publicKey.toString();
-      console.log(`Closing position ${positionKey}...`);
-      
-      // Declare the new position keypair at the top of the function
-      let newPositionKeypair: Keypair | undefined;
-      
-      // Store position data for recreating later
-      const storedPosition = this.positionStorage.getPositionRange(lbPosition.publicKey);
-      let singleSidedX: boolean;
-      
-      // Get current active bin
+      const oldDbPositionData = await this.positionRepository.getPositionByKey(oldPositionKeyStr);
+      if (!oldDbPositionData) {
+        console.error(`Cannot rebalance: DB data for old position ${oldPositionKeyStr} not found.`);
+        const localData = this.positionStorage.getPositionRange(oldPositionKey);
+        if (!localData){
+           console.error(`Local storage data also missing for ${oldPositionKeyStr}. Aborting rebalance.`);
+           return;
+        }
+         console.warn(`Using local storage data for ${oldPositionKeyStr} as DB data was missing.`);
+         return;
+      }
+
+      let accumulatedFees = {
+          totalClaimedFeeX: oldDbPositionData.total_claimed_fee_x || '0',
+          totalClaimedFeeY: oldDbPositionData.total_claimed_fee_y || '0',
+          totalFeeUsdClaimed: Number(oldDbPositionData.total_fee_usd_claimed || 0),
+      };
+
+      const pendingRawFeeX = lbPosition.positionData.feeX || new BN(0);
+      const pendingRawFeeY = lbPosition.positionData.feeY || new BN(0);
+
+      // FIX: Access token info directly from the DLMM instance properties
+      // const { tokenX, tokenY } = await dlmm.getLbPair(); // Incorrect
+      const tokenX = dlmm.tokenX;
+      const tokenY = dlmm.tokenY;
+      const tokenXDecimals = tokenX.decimal;
+      const tokenYDecimals = tokenY.decimal;
+
+      const prices = await getTokenPricesJupiter([tokenX.publicKey.toString(), tokenY.publicKey.toString()]);
+      const tokenXPrice = prices[tokenX.publicKey.toString()] || 0;
+      const tokenYPrice = prices[tokenY.publicKey.toString()] || 0;
+
+      if (pendingRawFeeX.gtn(0) || pendingRawFeeY.gtn(0)) {
+        const pendingFeeXAmount = new Decimal(pendingRawFeeX.toString()).div(new Decimal(10).pow(tokenXDecimals));
+        const pendingFeeYAmount = new Decimal(pendingRawFeeY.toString()).div(new Decimal(10).pow(tokenYDecimals));
+        const pendingFeesUSDValue = pendingFeeXAmount.times(tokenXPrice).plus(pendingFeeYAmount.times(tokenYPrice));
+
+        const newTotalClaimedX = new Decimal(accumulatedFees.totalClaimedFeeX).plus(pendingFeeXAmount);
+        const newTotalClaimedY = new Decimal(accumulatedFees.totalClaimedFeeY).plus(pendingFeeYAmount);
+        const newTotalClaimedUSD = new Decimal(accumulatedFees.totalFeeUsdClaimed).plus(pendingFeesUSDValue);
+
+        accumulatedFees = {
+          totalClaimedFeeX: newTotalClaimedX.toString(),
+          totalClaimedFeeY: newTotalClaimedY.toString(),
+          totalFeeUsdClaimed: newTotalClaimedUSD.toNumber(),
+        };
+        console.log(`Added pending fees. New accumulated USD: ${accumulatedFees.totalFeeUsdClaimed.toFixed(4)}`);
+      } else {
+        console.log("No pending fees detected on closing position.");
+      }
+
       const activeBin = await dlmm.getActiveBin();
       const activeBinId = activeBin.binId;
-      
-      // Determine new position range based on active bin
-      let newMinBinId: number;
-      let newMaxBinId: number;
-      
-      // Determine if we should create X-sided or Y-sided position
-      if (storedPosition) {
-        // If we have stored position data, use it to determine
-        if (activeBinId < storedPosition.minBinId) {
-          console.log(`Active bin ${activeBinId} < min bin ${storedPosition.minBinId}, will create X-sided position`);
-          singleSidedX = true;
-          newMinBinId = activeBinId;
-          newMaxBinId = activeBinId + 69; // Use same range size
-        } else if (activeBinId > storedPosition.maxBinId) {
-          console.log(`Active bin ${activeBinId} > max bin ${storedPosition.maxBinId}, will create Y-sided position`);
-          singleSidedX = false;
-          newMinBinId = activeBinId - 69; // Use same range size
-          newMaxBinId = activeBinId;
-        } else {
-          console.log(`Active bin ${activeBinId} is within range [${storedPosition.minBinId}, ${storedPosition.maxBinId}], skipping rebalance`);
-          return; // Skip this position as it's in range
-        }
-      } else {
-        // Default to X-sided if we don't have stored data
-        console.log(`No stored position data, defaulting to X-sided position`);
+      let singleSidedX: boolean;
+      if (activeBinId < oldDbPositionData.min_bin_id) {
         singleSidedX = true;
-        newMinBinId = activeBinId;
-        newMaxBinId = activeBinId + 69;
-      }
-      
-      // Get token amounts before removing liquidity
-      const posData = lbPosition.positionData;
-      const totalXAmount = posData.totalXAmount;
-      const totalYAmount = posData.totalYAmount;
-      console.log(`Position has ${totalXAmount} X tokens and ${totalYAmount} Y tokens`);
-      
-      // Log more details about the position - Fix position key confusion
-      console.log(`Position details - CORRECTED KEY:`);
-      console.log(`  Pool address: ${poolAddress.toString()}`);
-      console.log(`  Position key: ${positionKey}`);
-      console.log(`  Lower bin: ${lbPosition.positionData.lowerBinId}`);
-      console.log(`  Upper bin: ${lbPosition.positionData.upperBinId}`);
-      console.log(`  X amount: ${totalXAmount.toString()}`);
-      console.log(`  Y amount: ${totalYAmount.toString()}`);
-      
-      // Remove liquidity and close position
-      console.log(`Removing liquidity and closing position ${positionKey}...`);
-      try {
-        // Get all bin IDs with liquidity
-        console.log(`Getting bin IDs with liquidity...`);
-        const positionBinData = lbPosition.positionData.positionBinData;
-        const binIds = positionBinData.map(bin => bin.binId);
-        console.log(`Found ${binIds.length} bins with liquidity: ${binIds.join(', ')}`);
-        
-        if (binIds.length > 0) {
-          // Remove liquidity from all bins and close position
-          const removeLiquidityTx = await dlmm.removeLiquidity({
-            position: lbPosition.publicKey,
-            binIds: binIds,
-            bps: new BN('10000'), // Use string '10000' instead of number 10000
-            user: this.wallet.publicKey,
-            shouldClaimAndClose: true // Close the position after removing liquidity
-          });
-          
-          // Handle both single transaction and array of transactions
-          const txsToSend = Array.isArray(removeLiquidityTx) ? removeLiquidityTx : [removeLiquidityTx];
-          
-          for (const tx of txsToSend) {
-            // Log the transaction instructions to identify duplicates
-            console.log(`Transaction has ${tx.instructions.length} instructions`);
-            
-            // Create a map to track duplicate instructions
-            const instructionMap = new Map();
-            
-            tx.instructions.forEach((ix, index) => {
-              // Create a simple hash of the instruction for comparison
-              const ixHash = `${ix.programId.toString()}-${ix.data.slice(0, 8).toString('hex')}`;
-              
-              if (instructionMap.has(ixHash)) {
-                console.log(`⚠️ Potential duplicate instruction found at index ${index}:`);
-                console.log(`  First occurrence at index ${instructionMap.get(ixHash)}`);
-                console.log(`  Program: ${ix.programId.toString()}`);
-                console.log(`  Data prefix: ${ix.data.slice(0, 8).toString('hex')}`);
-                
-                // Remove the duplicate instruction
-                console.log(`  Removing duplicate instruction at index ${index}`);
-                tx.instructions.splice(index, 1);
-              } else {
-                instructionMap.set(ixHash, index);
-              }
-            });
-            
-            // Add priority fee - increase compute units and price
-            // Check if compute budget instructions already exist
-            const computeBudgetProgramId = ComputeBudgetProgram.programId.toString();
-            const hasComputeBudgetInstructions = tx.instructions.some(ix => 
-              ix.programId.toString() === computeBudgetProgramId
-            );
-            
-            if (!hasComputeBudgetInstructions) {
-              console.log('Adding compute budget instructions');
-              tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }));
-            } else {
-              console.log('Compute budget instructions already present, skipping');
-            }
-          }
-
-          // Set recent blockhash
-          const { blockhash } = await this.connection.getLatestBlockhash('finalized');
-          for (const tx of txsToSend) {
-            tx.recentBlockhash = blockhash;
-            tx.feePayer = this.wallet.publicKey;
-            
-            // Use withSafeKeypair here
-            const signature = await withSafeKeypair(this.config, async (keypair) => {
-              return sendAndConfirmTransaction(
-                this.connection, tx, [keypair], 
-                { skipPreflight: false, commitment: 'confirmed' }
-              );
-            });
-            console.log('Remove Liquidity and Close Position Transaction Signature:', signature);
-          }
-          
-          // Remove from storage
-          if (typeof positionKey === 'string') {
-            // Convert string to PublicKey
-            this.positionStorage.removePosition(new PublicKey(positionKey));
-          } else {
-            // Already a PublicKey
-            this.positionStorage.removePosition(positionKey);
-          }
-          console.log(`Removed position ${positionKey.toString()} from position storage`);
-          
-          // Initialize the keypair here
-          newPositionKeypair = Keypair.generate();
-          
-          // Create new single-sided position
-          if (singleSidedX) {
-            // Use the X amount from the position we just closed
-            const xAmountParts = totalXAmount.toString().split('.');
-            const xAmountInteger = xAmountParts[0]; // Just take the integer part
-            console.log(`Using integer X amount: ${xAmountInteger}`);
-            await this.createSingleSidePosition(dlmm, poolAddress, true, new BN(xAmountInteger), new BN('0'));
-          } else {
-            // Use the Y amount from the position we just closed
-            const yAmountParts = totalYAmount.toString().split('.');
-            const yAmountInteger = yAmountParts[0]; // Just take the integer part
-            console.log(`Using integer Y amount: ${yAmountInteger}`);
-            await this.createSingleSidePosition(dlmm, poolAddress, false, new BN('0'), new BN(yAmountInteger));
-          }
-        } else {
-          console.log(`No bins with liquidity found for position ${positionKey}`);
-        }
-      } catch (error) {
-        console.error(`Error closing position ${positionKey}:`, error);
-      }
-      
-      // Check if we successfully created a new position
-      if (!newPositionKeypair) {
-        console.error('Failed to create new position keypair');
+      } else if (activeBinId > oldDbPositionData.max_bin_id) {
+        singleSidedX = false;
+      } else {
+        console.log(`Active bin ${activeBinId} still within DB range [${oldDbPositionData.min_bin_id}, ${oldDbPositionData.max_bin_id}]. Unexpected state. Skipping rebalance.`);
         return;
       }
-      
-      // Now newPositionKeypair is in scope and we've confirmed it exists
-      const positionsMap = await this.getUserPositions();
-      const newPosition = positionsMap.get(newPositionKeypair.publicKey.toString());
-      
-      let positionValue = 0;
-      if (newPosition) {
-        positionValue = await this.calculatePositionValue(newPosition);
-        console.log(`New position value: $${positionValue.toFixed(2)}`);
+      console.log(`Determined new position side: ${singleSidedX ? 'X-sided' : 'Y-sided'}`);
+
+      console.log(`Closing old on-chain position ${oldPositionKeyStr}...`);
+      const positionBinData = lbPosition.positionData.positionBinData;
+      const binIds = positionBinData.map(bin => bin.binId);
+      let closeSuccess = false;
+
+      if (binIds.length > 0) {
+         console.log(`Position ${oldPositionKeyStr} has ${binIds.length} bins. Attempting removeLiquidity...`);
+         try {
+             const removeLiquidityTx = await dlmm.removeLiquidity({
+                position: oldPositionKey, binIds, bps: new BN('10000'), user: this.wallet.publicKey, shouldClaimAndClose: true
+             });
+             const txsToSend = Array.isArray(removeLiquidityTx) ? removeLiquidityTx : [removeLiquidityTx];
+             for (const tx of txsToSend) {
+                const computeBudgetProgramId = ComputeBudgetProgram.programId.toString();
+                const hasComputeBudgetInstructions = tx.instructions.some(ix => ix.programId.toString() === computeBudgetProgramId);
+                if (!hasComputeBudgetInstructions) {
+                   tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }));
+                   tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 30000 }));
+                }
+                const { blockhash } = await this.connection.getLatestBlockhash('finalized');
+                tx.recentBlockhash = blockhash; tx.feePayer = this.wallet.publicKey;
+                const signature = await withSafeKeypair(this.config, k => sendAndConfirmTransaction(this.connection, tx, [k], { skipPreflight: false, commitment: 'confirmed' }));
+                console.log('Remove & Close Tx Signature:', signature);
+             }
+             closeSuccess = true;
+         } catch (error) {
+            console.error(`Error removing liquidity/closing ${oldPositionKeyStr}:`, error);
+            throw error;
+         }
       } else {
-        console.log('New position not found in user positions, using default value 0');
+         console.log(`Position ${oldPositionKeyStr} has no liquidity bins. Attempting direct close...`);
+         try {
+            const closeTx = await dlmm.closePosition({ owner: this.wallet.publicKey, position: lbPosition });
+            const computeBudgetProgramId = ComputeBudgetProgram.programId.toString();
+            const hasComputeBudgetInstructions = closeTx.instructions.some(ix => ix.programId.toString() === computeBudgetProgramId);
+            if (!hasComputeBudgetInstructions) {
+               closeTx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 200000 }));
+            
+            }
+            const { blockhash } = await this.connection.getLatestBlockhash('finalized');
+            closeTx.recentBlockhash = blockhash; closeTx.feePayer = this.wallet.publicKey;
+            const signature = await withSafeKeypair(this.config, k => sendAndConfirmTransaction(this.connection, closeTx, [k], { skipPreflight: false, commitment: 'confirmed' }));
+            console.log('Direct Close Tx Signature:', signature);
+            closeSuccess = true;
+         } catch (error) {
+             console.error(`Error directly closing empty position ${oldPositionKeyStr}:`, error);
+             throw error;
+         }
       }
-      
-      // Before transfer operation
-      console.log(`REBALANCE: About to transfer history from ${positionKey} to ${newPositionKeypair.publicKey.toString()}`);
-      console.log(`REBALANCE: Original startingPositionValue: ${
-        storedPosition?.startingPositionValue || 'undefined'
-      }`);
-      
-      // Transfer position history
+       if (!closeSuccess) {
+           console.error(`Failed to close on-chain position ${oldPositionKeyStr}. Aborting rebalance.`);
+           return;
+       }
+       console.log(`On-chain position ${oldPositionKeyStr} closed.`);
+
+       // ---- START: New Balance Query Logic ----
+
+       let amountToDepositLamports = new BN(0);
+       let actualTokenAmountDeposited = new Decimal(0); // Track the actual token amount (not lamports)
+
+       try {
+            // Determine the mint address of the token to deposit for the new position
+            const targetTokenMint = singleSidedX ? tokenX.publicKey : tokenY.publicKey;
+            const targetTokenDecimals = singleSidedX ? tokenXDecimals : tokenYDecimals;
+            console.log(`New position requires ${singleSidedX ? 'X' : 'Y'} token (${targetTokenMint.toString()})`);
+
+            // Find the Associated Token Account (ATA) for the target token in the wallet
+            const { getAssociatedTokenAddress } = await import('@solana/spl-token'); // Dynamic import for clarity
+            const targetTokenATA = await getAssociatedTokenAddress(targetTokenMint, this.wallet.publicKey);
+            console.log(`Wallet's ATA for target token: ${targetTokenATA.toString()}`);
+
+            // Get the balance of the ATA
+            const balanceResponse = await this.connection.getTokenAccountBalance(targetTokenATA);
+
+            if (balanceResponse?.value?.uiAmount === null || balanceResponse?.value?.amount === '0') {
+                 console.log(`Wallet balance for ${targetTokenMint.toString()} is zero or ATA not found. Creating new position with no deposit.`);
+                 amountToDepositLamports = new BN(0);
+                 actualTokenAmountDeposited = new Decimal(0);
+            } else {
+                 amountToDepositLamports = new BN(balanceResponse.value.amount);
+                 actualTokenAmountDeposited = new Decimal(balanceResponse.value.uiAmountString ?? '0');
+                 console.log(`Actual wallet balance for ${targetTokenMint.toString()}: ${actualTokenAmountDeposited.toString()} tokens (Lamports: ${amountToDepositLamports.toString()})`);
+
+                 // Optional: Apply a small safety margin (e.g., 99.9%) if needed, though often depositing full balance is desired
+                 // const safetyFactor = new Decimal('0.999');
+                 // amountToDepositLamports = new BN(new Decimal(amountToDepositLamports.toString()).mul(safetyFactor).floor().toString());
+                 // actualTokenAmountDeposited = new Decimal(amountToDepositLamports.toString()).div(new Decimal(10).pow(targetTokenDecimals));
+                 // console.log(`Using 99.9% of balance for safety: ${actualTokenAmountDeposited.toString()} tokens (Lamports: ${amountToDepositLamports.toString()})`);
+             }
+       } catch (balanceError) {
+            console.error(`Error querying wallet balance for ${singleSidedX ? 'X' : 'Y'} token:`, balanceError);
+            console.warn(`Proceeding to create position with zero deposit due to balance query error.`);
+            amountToDepositLamports = new BN(0);
+            actualTokenAmountDeposited = new Decimal(0);
+       }
+
+       // ---- END: New Balance Query Logic ----
+
+      const newPositionKeypair = Keypair.generate();
+      console.log(`Creating new ${singleSidedX ? 'X' : 'Y'}-sided position ${newPositionKeypair.publicKey.toString()} with actual balance...`);
+
+      // Create the new position using the actual balance queried
+      const { positionPubKey: newPositionPubKey, minBinId: newMinBinId, maxBinId: newMaxBinId, originalActiveBin: newOriginalActiveBin } = await createSingleSidePosition(
+          this.connection,
+          dlmm,
+          this.wallet, // Pass the signing wallet (already available as this.wallet)
+          newPositionKeypair,
+          amountToDepositLamports, // Use the actual queried balance
+          singleSidedX
+      );
+      console.log(`New on-chain position created: ${newPositionPubKey.toString()}. Range: [${newMinBinId}, ${newMaxBinId}], Created at Bin: ${newOriginalActiveBin}`);
+
+      // Recalculate snapshot value based on ACTUAL deposited amount and current price
+      const currentTargetTokenPrice = singleSidedX ? tokenXPrice : tokenYPrice;
+      const newPositionSnapshotValue = actualTokenAmountDeposited.times(currentTargetTokenPrice).toNumber();
+      console.log(`Calculated snapshot value for new position based on actual deposit: $${newPositionSnapshotValue.toFixed(4)}`);
+
+      console.log(`Transferring history from ${oldPositionKeyStr} to ${newPositionPubKey.toString()}`);
       this.positionStorage.transferPositionHistory(
-        lbPosition.publicKey,
-        newPositionKeypair.publicKey,
+        oldPositionKey,
+        newPositionPubKey,
         {
-          originalActiveBin: activeBinId,
+          originalActiveBin: newOriginalActiveBin,
           minBinId: newMinBinId,
           maxBinId: newMaxBinId,
-          snapshotPositionValue: positionValue,
-          poolAddress: poolAddress.toString()
-        }
+          snapshotPositionValue: newPositionSnapshotValue,
+          poolAddress: poolAddress.toString(),
+        },
+        accumulatedFees
       );
-      
-      // After transfer
-      console.log(`REBALANCE: History transfer complete`);
-      
-    } catch (error) {
-      console.error(`Error processing position:`, error);
-    }
-  }
 
-  /**
-   * Creates a new single-sided position
-   */
-  public async createSingleSidePosition(
-    dlmm: DLMM, 
-    poolAddress: PublicKey, 
-    singleSidedX: boolean,
-    totalXAmount: BN = new BN('0'),
-    totalYAmount: BN = new BN('0')
-  ): Promise<void> {
-    try {
-      console.log(`Creating new single-sided position (${singleSidedX ? 'X' : 'Y'}-sided) in pool ${poolAddress.toString()}...`);
-      
-      // Get current active bin
-      const activeBin = await dlmm.getActiveBin();
-      const activeBinId = activeBin.binId;
-      
-      // Calculate bin range
-      const totalRangeInterval = 69;
-      let minBinId: number;
-      let maxBinId: number;
-      
-      if (singleSidedX) {
-        // For X-sided positions, set range above active bin
-        minBinId = activeBinId;
-        maxBinId = activeBinId + totalRangeInterval;
-        console.log(`Using ${totalXAmount.toString()} X tokens for new position`);
-      } else {
-        // For Y-sided positions, set range below active bin
-        minBinId = activeBinId - totalRangeInterval;
-        maxBinId = activeBinId;
-        console.log(`Using ${totalYAmount.toString()} Y tokens (1 SOL) for new position`);
-      }
-      
-      console.log(`New position bin range: [${minBinId}, ${maxBinId}]`);
-      
-      // Create strategy parameters
-      const strategy: StrategyParameters = {
-        minBinId,
-        maxBinId,
-        strategyType: StrategyType.BidAskImBalanced,
-        singleSidedX
-      };
-      
-      // Generate new position keypair
-      const newPositionKeypair = Keypair.generate();
-      
-      // Create the new position
-      const createTx = await dlmm.initializePositionAndAddLiquidityByStrategy({
-        positionPubKey: newPositionKeypair.publicKey,
-        totalXAmount,
-        totalYAmount,
-        strategy,
-        user: this.wallet.publicKey
-      });
-      
-      // Add priority fee
-      createTx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 30000 }));
-      
-      // Set recent blockhash
-      const { blockhash } = await this.connection.getLatestBlockhash('finalized');
-      createTx.recentBlockhash = blockhash;
-      createTx.feePayer = this.wallet.publicKey;
-      
-      // Use withSafeKeypair here
-      const signature = await withSafeKeypair(this.config, async (keypair) => {
-        return sendAndConfirmTransaction(
-          this.connection, createTx, [this.wallet, newPositionKeypair], 
-          { skipPreflight: false, commitment: 'confirmed' }
-        );
-      });
-      console.log('Create Position Transaction Signature:', signature);
-      
-      // Wait for the transaction to be confirmed and position to be created
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      
-      // Get the position info to calculate its value
-      const positionsMap = await this.getUserPositions();
-      const newPosition = positionsMap.get(newPositionKeypair.publicKey.toString());
-      
-      let positionValue = 0;
-      if (newPosition) {
-        positionValue = await this.calculatePositionValue(newPosition);
-        console.log(`New position value: $${positionValue.toFixed(2)}`);
-      } else {
-        console.log('New position not found in user positions, using default value 0');
-      }
-      
-      // Add new position to storage with pool address
-      this.positionStorage.addPosition(newPositionKeypair.publicKey, {
-        originalActiveBin: activeBinId,
-        minBinId,
-        maxBinId,
-        snapshotPositionValue: positionValue,
-        poolAddress: poolAddress.toString()
-      });
-      
-      console.log(`New position created: ${newPositionKeypair.publicKey.toString()}`);
-      
+      // FIX: Call the correct removePosition method (via PositionStorage)
+      // await this.positionRepository.removePosition(oldPositionKeyStr); // Incorrect
+      await this.positionStorage.removePosition(oldPositionKey); // Correct way
+
+      // Update last rebalance time for the *new* position key
+      this.lastRebalanceTime[newPositionPubKey.toString()] = Date.now();
+      delete this.lastRebalanceTime[oldPositionKeyStr];
+
+      console.log(`Rebalance complete for ${oldPositionKeyStr} -> ${newPositionPubKey.toString()}`);
+
     } catch (error) {
-      console.error(`Error creating single-sided position:`, error);
+      console.error(`Error during rebalance process for ${oldPositionKeyStr}:`, error);
     }
   }
 
@@ -533,72 +391,42 @@ export class RebalanceManager {
    * Calculates the USD value of a position based on token amounts and current prices
    */
   public async calculatePositionValue(position: PositionInfo): Promise<number> {
-    try {
-      // Check if we're already calculating this position (to prevent recursion)
-      const poolAddress = position.publicKey.toString();
-      
-      // Get the active bin price information for the position's pool
-      const dlmm = await DLMM.create(this.connection, position.publicKey);
-      const activeBinData = await dlmm.getActiveBin();
-      console.log(`Pool ${poolAddress} - Active bin: ${activeBinData.binId}, Price: ${activeBinData.price.toString()}`);
-      
-      // Get price per token
-      const pricePerToken = Number(activeBinData.pricePerToken);
-      
-      // Get SOL price from Pyth
-      const solPriceStr = await FetchPrice(process.env.SOL_Price_ID as string);
-      const solPrice = parseFloat(solPriceStr);
-      console.log(`Current SOL Price: $${solPrice}`);
+     // ... implementation to calculate value based on current amounts and prices ...
+     // Ensure it uses position.lbPairPositionsData[0].positionData.totalXAmount etc.
+     // and fetches token decimals and prices correctly.
+     try {
+        // FIX: Use position.publicKey which refers to the pool in PositionInfo context
+        const poolAddress = position.publicKey;
+        const dlmm = await this.getDLMMInstance(poolAddress); // Use correct pool address
+        const activeBinData = await dlmm.getActiveBin();
+        const pricePerToken = Number(activeBinData.pricePerToken);
+        const solPriceStr = await FetchPrice(process.env.SOL_Price_ID as string);
+        const solPrice = parseFloat(solPriceStr);
 
-      // Extract position amounts
-      const lbPosition = position.lbPairPositionsData[0];
-      if (!lbPosition || !lbPosition.positionData) {
-        console.error('Invalid position data structure');
-        return 0;
-      }
+        const lbPosition = position.lbPairPositionsData[0];
+        if (!lbPosition || !lbPosition.positionData) return 0;
 
-      // Convert amounts using token decimals
-      const { tokenX, tokenY } = position;
-      const xAmount = Number(lbPosition.positionData.totalXAmount) / 10 ** tokenX.decimal;
-      const yAmount = Number(lbPosition.positionData.totalYAmount) / 10 ** tokenY.decimal;
-      console.log(`Position amounts - X: ${xAmount}, Y: ${yAmount}`);
-       
-      // Calculate value based on which token is SOL
-      let totalValue = 0;
-      const SOL_MINT = 'So11111111111111111111111111111111111111112';
-      
-      // If Y is SOL
-      if (tokenY.publicKey.toString() === SOL_MINT) {
-        // X value in USD = X amount * price per token * SOL price in USD
-        const xValueInUsd = xAmount * pricePerToken * solPrice;
-        // Y value in USD = Y amount * SOL price in USD
-        const yValueInUsd = yAmount * solPrice;
-        
-        console.log(`Value calculation - X: $${xValueInUsd.toFixed(2)}, Y: $${yValueInUsd.toFixed(2)}`);
-        totalValue = xValueInUsd + yValueInUsd;
-      } 
-      // If X is SOL
-      else if (tokenX.publicKey.toString() === SOL_MINT) {
-        // X value in USD = X amount * SOL price in USD
-        const xValueInUsd = xAmount * solPrice;
-        // Y value in USD = Y amount / price per token * SOL price in USD
-        const yValueInUsd = yAmount / pricePerToken * solPrice;
-        
-        console.log(`Value calculation - X: $${xValueInUsd.toFixed(2)}, Y: $${yValueInUsd.toFixed(2)}`);
-        totalValue = xValueInUsd + yValueInUsd;
-      }
-      // For other token pairs, we would need external price data
-      else {
-        console.log('Non-SOL pair detected. Cannot calculate value without price data.');
-        return 0;
-      }
-      
-      console.log(`Total position value: $${totalValue.toFixed(2)}`);
-      
-      return totalValue;
-    } catch (error) {
-      console.error('Error calculating position value:', error);
-      return 0;
-    }
+        // FIX: Use dlmm.tokenX and dlmm.tokenY for token info
+        const { tokenX, tokenY } = dlmm;
+        const xAmount = Number(lbPosition.positionData.totalXAmount) / 10 ** tokenX.decimal;
+        const yAmount = Number(lbPosition.positionData.totalYAmount) / 10 ** tokenY.decimal;
+
+        let totalValue = 0;
+        const SOL_MINT = 'So11111111111111111111111111111111111111112';
+
+        if (tokenY.publicKey.toString() === SOL_MINT) {
+            totalValue = (xAmount * pricePerToken * solPrice) + (yAmount * solPrice);
+        } else if (tokenX.publicKey.toString() === SOL_MINT) {
+            totalValue = (xAmount * solPrice) + (yAmount / pricePerToken * solPrice);
+        } else {
+            console.warn(`Value calc: Non-SOL pair ${tokenX.publicKey.toString()}/${tokenY.publicKey.toString()} - needs external prices.`);
+            // Fallback or return 0
+            return 0; // Or implement external price fetching
+        }
+        return totalValue;
+     } catch(error){
+         console.error("Error in calculatePositionValue:", error);
+         return 0;
+     }
   }
 }

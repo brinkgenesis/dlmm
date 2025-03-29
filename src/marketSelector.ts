@@ -303,13 +303,19 @@ export class MarketSelector {
       
       // Call your existing createSingleSidePosition function with withSafeKeypair
       await withSafeKeypair(this.config, async (keypair) => {
+        // Generate a new keypair for the position itself
+        const positionKeypair = Keypair.generate();
+        console.log(`Generated new keypair for position: ${positionKeypair.publicKey.toString()}`);
+
+        // Call the on-chain function correctly
         return createSingleSidePosition(
           this.connection,
           dlmm,
-          keypair,
+          keypair, // This is the wallet keypair for fee payment
+          positionKeypair, // This is the keypair for the new position
           tokenAmountBN,
-          singleSidedX,
-          this.positionStorage
+          singleSidedX
+          // positionStorage argument removed
         );
       });
       

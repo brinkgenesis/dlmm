@@ -1,33 +1,40 @@
 import { supabase } from './supabase';
 import { PublicKey } from '@solana/web3.js';
 import axios from 'axios';
+import { Decimal } from 'decimal.js';
 
 // This matches the structure in your positions table
 interface SupabasePosition {
   id: string;
   user_id: string;
   pool_address: string;
-  position_key: string; // We'll need to add this column
+  position_key: string;
   token_x_mint: string;
   token_y_mint: string;
   token_x_symbol?: string;
   token_y_symbol?: string;
   token_x_logo?: string;
   token_y_logo?: string;
+  original_active_bin?: number;
   min_bin_id: number;
   max_bin_id: number;
+  snapshot_position_value?: number;
   current_price?: number;
   current_price_usd?: number;
+  pending_fee_x?: string;
+  pending_fee_y?: string;
   pending_fees_usd?: number;
-  total_claimed_fee_x?: string;
-  total_claimed_fee_y?: string;
+  total_claimed_fee_x: string;
+  total_claimed_fee_y: string;
+  total_fee_usd_claimed?: number;
   daily_apr?: number;
   starting_position_value: number;
   current_value?: number;
   original_start_date?: string;
   rebalance_count?: number;
   previous_position_key?: string;
-  fee_history?: any; // We'll store this as JSONB
+  fee_history?: any;
+  updated_at?: string;
 }
 
 interface MeteoraPosData {
@@ -49,137 +56,147 @@ export class PositionRepository {
   // Since auth is not required now, we'll use a default user ID
   private defaultUserId = 'default-user';
 
-  // Sync a single position to Supabase
+  // Method to fetch a specific position's data from the database
+  async getPositionByKey(positionKey: string): Promise<SupabasePosition | null> {
+    try {
+      const { data, error } = await supabase
+        .from('positions')
+        .select('*')
+        .eq('position_key', positionKey)
+        .eq('user_id', this.defaultUserId)
+        .maybeSingle();
+
+      if (error) {
+        console.error(`Error fetching position by key ${positionKey}:`, error);
+        return null;
+      }
+      return data;
+    } catch (error) {
+      console.error(`Exception fetching position by key ${positionKey}:`, error);
+      return null;
+    }
+  }
+
+  // Updated syncPosition - primary method for inserts/updates
   async syncPosition(positionKey: string, positionData: any): Promise<void> {
     try {
-      // Check if position already exists
+      // Use maybeSingle to handle both insert and update cases smoothly
       const { data: existingPosition } = await supabase
         .from('positions')
         .select('id')
         .eq('position_key', positionKey)
-        .single();
-      
-      // NEW: Get claimed fee data from Meteora API
-      const meteoraData = await this.fetchPositionDataFromMeteora(positionKey);
-      
-      // Format the data for Supabase
-      const supabaseData = {
+        .eq('user_id', this.defaultUserId)
+        .maybeSingle();
+
+      // Prepare data for Supabase, respecting persistent fields
+      const supabaseData: Partial<SupabasePosition> = { // Use Partial for flexibility
         user_id: this.defaultUserId,
         position_key: positionKey,
         pool_address: positionData.poolAddress || '',
+        // FIX: Prioritize mints from positionData if available
         token_x_mint: positionData.tokenXMint || '',
         token_y_mint: positionData.tokenYMint || '',
         token_x_symbol: positionData.tokenXSymbol,
         token_y_symbol: positionData.tokenYSymbol,
         token_x_logo: positionData.tokenXLogo,
         token_y_logo: positionData.tokenYLogo,
-        min_bin_id: positionData.minBinId,
-        max_bin_id: positionData.maxBinId,
-        // UPDATED: Rename these to pending fees for clarity
-        pending_fee_x: positionData.lastFeeX,
-        pending_fee_y: positionData.lastFeeY,
-        pending_fees_usd: positionData.lastFeesUSD,
-        // NEW: Add claimed fees from Meteora
-        total_claimed_fee_x: meteoraData?.total_fee_x_claimed !== undefined 
-          ? String(meteoraData.total_fee_x_claimed) 
-          : null,
-        total_claimed_fee_y: meteoraData?.total_fee_y_claimed !== undefined 
-          ? String(meteoraData.total_fee_y_claimed) 
-          : null,
-        total_fee_usd_claimed: meteoraData?.total_fee_usd_claimed || null,
+        original_active_bin: positionData.originalActiveBin, // Bin at time of creation/rebalance
+        min_bin_id: positionData.minBinId, // Current range min
+        max_bin_id: positionData.maxBinId, // Current range max
+        snapshot_position_value: positionData.snapshotPositionValue, // Value for drawdown
+        pending_fee_x: positionData.lastFeeX, // Use local storage's last recorded pending
+        pending_fee_y: positionData.lastFeeY, // Use local storage's last recorded pending
+        pending_fees_usd: positionData.lastFeesUSD, // Use local storage's last recorded pending
+        // Claimed fees are passed accumulated from PositionStorage/RebalanceManager
+        total_claimed_fee_x: positionData.totalClaimedFeeX !== undefined ? String(positionData.totalClaimedFeeX) : '0',
+        total_claimed_fee_y: positionData.totalClaimedFeeY !== undefined ? String(positionData.totalClaimedFeeY) : '0',
+        total_fee_usd_claimed: positionData.totalFeeUsdClaimed !== undefined ? Number(positionData.totalFeeUsdClaimed) : 0,
         daily_apr: positionData.dailyAPR,
-        starting_position_value: positionData.startingPositionValue || positionData.snapshotPositionValue,
-        current_value: positionData.lastPositionValue,
-        original_start_date: positionData.originalStartDate ? new Date(positionData.originalStartDate).toISOString() : undefined,
-        rebalance_count: positionData.rebalanceCount,
-        previous_position_key: positionData.previousPositionKey,
-        fee_history: positionData.feeHistory
+        // --- Persistent Fields ---
+        starting_position_value: positionData.startingPositionValue, // The VERY original value
+        original_start_date: positionData.originalStartDate ? new Date(positionData.originalStartDate).toISOString() : new Date().toISOString(), // The VERY original date
+        // --- Updated Fields ---
+        current_value: positionData.lastPositionValue !== undefined ? positionData.lastPositionValue : positionData.currentValue, // Latest value
+        rebalance_count: positionData.rebalanceCount || 0,
+        previous_position_key: positionData.previousPositionKey, // Track lineage if needed
+        fee_history: positionData.feeHistory, // Store APR history
+        updated_at: new Date().toISOString(), // Always update timestamp
       };
-      
+
       if (existingPosition) {
         // Update existing position
-        await supabase
+        const { error } = await supabase
           .from('positions')
           .update(supabaseData)
           .eq('id', existingPosition.id);
+        if (error) throw error;
+        // console.log(`Updated position ${positionKey} in DB.`);
       } else {
-        // Insert new position
-        await supabase
+        // Insert new position (includes created_at by default)
+        const { error } = await supabase
           .from('positions')
-          .insert(supabaseData);
+          .insert({ ...supabaseData, user_id: this.defaultUserId }); // Ensure user_id on insert
+        if (error) throw error;
+        // console.log(`Inserted new position ${positionKey} in DB.`);
       }
     } catch (error) {
-      console.error(`Error syncing position ${positionKey} to Supabase:`, error);
-      // Continue with normal operation - Supabase is an add-on, not a replacement
+       if (error instanceof Error && (error as any).code === '23505') {
+         console.warn(`Position ${positionKey} likely already exists or race condition occurred. Skipping insert/update.`);
+       } else {
+        console.error(`Error syncing position ${positionKey} to Supabase:`, error);
+       }
     }
   }
 
-  // Load all positions from Supabase
+  // Updated loadPositions to fetch necessary fields
   async loadPositions(): Promise<Record<string, any>> {
     try {
       const { data: positions, error } = await supabase
         .from('positions')
-        .select('*')
+        .select('*') // Select all columns defined in SupabasePosition
         .eq('user_id', this.defaultUserId);
-      
+
       if (error) throw error;
-      
-      // Convert to the format expected by PositionStorage
+
       const positionsMap: Record<string, any> = {};
       positions?.forEach(position => {
         if (position.position_key) {
           positionsMap[position.position_key] = {
-            originalActiveBin: position.min_bin_id, // Approximation, adjust as needed
+            originalActiveBin: position.original_active_bin,
             minBinId: position.min_bin_id,
             maxBinId: position.max_bin_id,
-            snapshotPositionValue: position.starting_position_value,
-            startingPositionValue: position.starting_position_value,
+            snapshotPositionValue: parseFloat(position.snapshot_position_value || '0'), // Value for drawdown
+            startingPositionValue: parseFloat(position.starting_position_value || '0'), // Persistent original value
             lastFeeTimestamp: position.updated_at ? new Date(position.updated_at).getTime() : undefined,
-            lastFeeX: position.total_claimed_fee_x,
-            lastFeeY: position.total_claimed_fee_y,
-            lastFeesUSD: position.pending_fees_usd,
-            lastPositionValue: position.current_value,
-            dailyAPR: position.daily_apr,
+            lastFeeX: position.pending_fee_x, // Raw pending X from DB
+            lastFeeY: position.pending_fee_y, // Raw pending Y from DB
+            lastFeesUSD: parseFloat(position.pending_fees_usd || '0'), // Pending USD from DB
+            lastPositionValue: parseFloat(position.current_value || '0'), // Current value from DB
+            dailyAPR: parseFloat(position.daily_apr || '0'),
             feeHistory: position.fee_history || [],
-            originalStartDate: position.original_start_date ? new Date(position.original_start_date).getTime() : undefined,
-            rebalanceCount: position.rebalance_count,
-            previousPositionKey: position.previous_position_key
+            originalStartDate: position.original_start_date ? new Date(position.original_start_date).getTime() : undefined, // Persistent start date
+            rebalanceCount: position.rebalance_count || 0,
+            previousPositionKey: position.previous_position_key,
+            poolAddress: position.pool_address, // Needed for context
+            // Load claimed fees from DB
+            totalClaimedFeeX: position.total_claimed_fee_x || '0',
+            totalClaimedFeeY: position.total_claimed_fee_y || '0',
+            totalFeeUsdClaimed: parseFloat(position.total_fee_usd_claimed || '0'),
           };
         }
       });
-      
       return positionsMap;
     } catch (error) {
       console.error('Error loading positions from Supabase:', error);
-      return {}; // Return empty object on error - will fall back to file
+      return {};
     }
   }
 
-  // Remove a position from Supabase
-  async removePosition(positionKey: string): Promise<void> {
-    try {
-      await supabase
-        .from('positions')
-        .delete()
-        .eq('position_key', positionKey);
-    } catch (error) {
-      console.error(`Error removing position ${positionKey} from Supabase:`, error);
-      // Continue with normal operation
-    }
-  }
+  // Remove syncPositionWithMarketData if syncPosition handles all cases,
+  // OR ensure it follows the same logic regarding persistent fields.
+  // For simplicity, let's assume syncPosition is the primary method.
 
-  // Sync all positions at once
-  async syncAllPositions(positions: Record<string, any>): Promise<void> {
-    try {
-      // Convert to an array of records for batch operation
-      const positionEntries = Object.entries(positions);
-      for (const [key, data] of positionEntries) {
-        await this.syncPosition(key, data);
-      }
-    } catch (error) {
-      console.error('Error syncing all positions to Supabase:', error);
-    }
-  }
+  // Remove syncAllPositions if not used, or ensure it calls the updated syncPosition
 
   async createPosition(userId: string, positionData: {
     poolAddress: string;
@@ -484,6 +501,25 @@ export class PositionRepository {
     } catch (error) {
       console.error(`Error fetching position data from Meteora API: ${error instanceof Error ? error.message : String(error)}`);
       return null;
+    }
+  }
+
+  // removePosition remains the same, ensure it targets user_id
+  async removePosition(positionKey: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('positions')
+        .delete()
+        .eq('position_key', positionKey)
+        .eq('user_id', this.defaultUserId); // Ensure user context
+
+      if (error) {
+        console.error(`Error removing position ${positionKey} from Supabase:`, error);
+      } else {
+        console.log(`Successfully removed position ${positionKey} from Supabase.`);
+      }
+    } catch (error) {
+      console.error(`Exception removing position ${positionKey} from Supabase:`, error);
     }
   }
 }

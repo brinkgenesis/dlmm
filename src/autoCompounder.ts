@@ -46,13 +46,18 @@ export class AutoCompounder {
       const tokenXBalance = await this.getTokenXBalance();
       if (tokenXBalance > 0) {
         await withSafeKeypair(this.config, async (keypair) => {
+          // Generate a new keypair for the position itself
+          const positionKeypair = Keypair.generate();
+          console.log(`Generated new keypair for auto-compounded position: ${positionKeypair.publicKey.toString()}`);
+
+          // Call the on-chain function correctly
           return createSingleSidePosition(
             this.connection,
             this.pool,
-            keypair,
-            new BN(tokenXBalance),
-            true,
-            this.positionStorage
+            keypair, // Wallet keypair for fees
+            positionKeypair, // New position keypair
+            new BN(tokenXBalance), // Amount might need adjustment based on actual balance representation
+            true // Assuming compounding X token, adjust if needed
           );
         });
       }

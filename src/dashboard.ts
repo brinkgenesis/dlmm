@@ -168,6 +168,11 @@ export class Dashboard {
             originalActiveBin: storedPosition?.originalActiveBin || posData.lowerBinId,
             snapshotPositionValue: storedPosition?.snapshotPositionValue || 0,
             startingPositionValue: storedPosition?.startingPositionValue || 0,
+            // --- Explicitly store mints early ---
+            tokenXMint: position.tokenX.publicKey.toString(),
+            tokenYMint: position.tokenY.publicKey.toString(),
+            // --- Default symbols to mint if market data fails ---
+           
             lastUpdated: new Date().toISOString()
           };
           
@@ -178,8 +183,6 @@ export class Dashboard {
             positionData.tokenYSymbol = marketData.token_y_symbol;
             positionData.tokenXLogo = marketData.token_x_logo;
             positionData.tokenYLogo = marketData.token_y_logo;
-            positionData.tokenXMint = marketData.token_x_mint;
-            positionData.tokenYMint = marketData.token_y_mint;
             positionData.dailyAPR = marketData.daily_apr;
             positionData.baseFeeRate = parseFloat(marketData.base_fee_percentage);
           }
@@ -366,57 +369,6 @@ export class Dashboard {
               console.error(`Error getting fee info for position ${positionKey}:`, error);
             }
 
-            // After we've calculated all the fee data for a position
-            if (lbPosition.positionData && positionData.pendingFeesUSD !== undefined) {
-              try {
-                // Check if position exists in storage first
-                const existingPosition = this.positionStorage.getPositionRange(lbPosition.publicKey);
-                
-                // If position doesn't exist in storage, add it first
-                if (!existingPosition) {
-                  console.log(`Position ${positionKey} not found in storage, adding it...`);
-                  this.positionStorage.addPosition(lbPosition.publicKey, {
-                    originalActiveBin: positionData.originalActiveBin,
-                    minBinId: positionData.minBinId,
-                    maxBinId: positionData.maxBinId,
-                    snapshotPositionValue: positionData.currentValue || 0,
-                    startingPositionValue: positionData.currentValue || 0,
-                    originalStartDate: Date.now()
-                  });
-                  console.log(`Added position ${positionKey} to storage`);
-                }
-                
-                // Now update fee data with pool address
-                this.positionStorage.updatePositionFeeData(
-                  lbPosition.publicKey,
-                  {
-                    feeX: positionData.feeX || "0",
-                    feeY: positionData.feeY || "0",
-                    feesUSD: positionData.pendingFeesUSD,
-                    positionValue: positionData.currentValue || 0,
-                    timestamp: Date.now()
-                  },
-                  poolAddress // Pass pool address
-                );
-                
-                console.log(`Updated fee data for position ${positionKey}`);
-
-                // Get the APR data
-                const aprData = this.positionStorage.getPositionAPRData(lbPosition.publicKey);
-                console.log(`APR data retrieved for ${positionKey}:`, aprData);
-
-                if (aprData) {
-                  positionData.dailyAPR = aprData.dailyAPR;
-                  positionData.lastFeeUpdate = aprData.lastUpdated;
-                  console.log(`Added APR data to position: dailyAPR=${positionData.dailyAPR}, lastUpdated=${positionData.lastFeeUpdate}`);
-                } else {
-                  console.log(`No APR data available yet - waiting for next run to calculate.`);
-                }
-              } catch (error) {
-                console.error(`Error calculating APR for position ${lbPosition.publicKey.toString()}:`, error);
-              }
-            }
-
             // If you want to add rebalance info to the display:
             positionData.rebalanceCount = storedPosition?.rebalanceCount || 0;
             positionData.originalStartDate = storedPosition?.originalStartDate || Date.now();
@@ -455,8 +407,9 @@ export class Dashboard {
       // Collect all unique mint addresses from positions
       const mintAddresses = new Set<string>();
       for (const position of enrichedPositions) {
-        if (position.tokenXSymbol) mintAddresses.add(position.tokenXSymbol);
-        if (position.tokenYSymbol) mintAddresses.add(position.tokenYSymbol);
+        // FIX: Always add the stored mint addresses
+        if (position.tokenXMint) mintAddresses.add(position.tokenXMint);
+        if (position.tokenYMint) mintAddresses.add(position.tokenYMint);
       }
       
       // Fetch token symbols and logos for all mint addresses
@@ -605,36 +558,6 @@ export class Dashboard {
       if (position.dailyAPR !== undefined) {
         console.log(`   Daily APR: ${position.dailyAPR.toFixed(2)}%`);
         console.log(`   Projected Annual: ${(position.dailyAPR * 365).toFixed(2)}%`);
-        
-        // Get the APR history for additional context
-        const aprHistory = this.positionStorage.getPositionAPRHistory(new PublicKey(position.publicKey));
-        if (aprHistory) {
-          console.log(`   Calculation: $${aprHistory.aprCalculation.feeChange.toFixed(4)} fees over ${Math.round(aprHistory.aprCalculation.timeSpan)} minutes`);
-          console.log(`   Data points: ${aprHistory.history.length} snapshots`);
-        }
-        
-        if (position.lastFeeUpdate) {
-          const lastUpdateTime = new Date(position.lastFeeUpdate).toLocaleString();
-          const currentTime = Date.now();
-          const timeDiffMs = currentTime - position.lastFeeUpdate;
-          
-          // Calculate time difference in a human-readable format
-          const minutesDiff = Math.floor(timeDiffMs / (1000 * 60));
-          let timeDiffString = '';
-          
-          if (minutesDiff < 60) {
-            timeDiffString = `${minutesDiff} minute${minutesDiff !== 1 ? 's' : ''}`;
-          } else {
-            const hoursDiff = Math.floor(minutesDiff / 60);
-            const remainingMinutes = minutesDiff % 60;
-            timeDiffString = `${hoursDiff} hour${hoursDiff !== 1 ? 's' : ''}`;
-            if (remainingMinutes > 0) {
-              timeDiffString += ` ${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''}`;
-            }
-          }
-          
-          console.log(`   Last Fee Update: ${lastUpdateTime} (${timeDiffString} ago)`);
-        }
       }
       
       console.log("-------------------------------------------");

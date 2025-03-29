@@ -155,13 +155,19 @@ export class OrderManager {
           );
 
           await withSafeKeypair(this.config, async (keypair) => {
+            // Generate a new keypair for the position itself
+            const positionKeypair = Keypair.generate();
+            console.log(`Generated new keypair for limit order position: ${positionKeypair.publicKey.toString()}`);
+
+            // Call the on-chain function correctly
             return createSingleSidePosition(
               this.connection,
               dlmm,
-              keypair,
+              keypair, // Wallet keypair for fees
+              positionKeypair, // New position keypair
               amountLamports,
-              singleSidedX,
-              this.positionStorage
+              singleSidedX, // Use the determined side
+              // positionStorage argument removed
             );
           });
           break;
