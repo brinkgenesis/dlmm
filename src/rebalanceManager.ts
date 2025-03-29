@@ -343,7 +343,7 @@ export class RebalanceManager {
       console.log(`Creating new ${singleSidedX ? 'X' : 'Y'}-sided position ${newPositionKeypair.publicKey.toString()} with actual balance...`);
 
       // Create the new position using the actual balance queried
-      const { positionPubKey: newPositionPubKey, minBinId: newMinBinId, maxBinId: newMaxBinId, originalActiveBin: newOriginalActiveBin } = await createSingleSidePosition(
+      const { positionKey: newPositionKey, minBinId: newMinBinId, maxBinId: newMaxBinId, originalActiveBin: newOriginalActiveBin } = await createSingleSidePosition(
           this.connection,
           dlmm,
           this.wallet, // Pass the signing wallet (already available as this.wallet)
@@ -351,17 +351,17 @@ export class RebalanceManager {
           amountToDepositLamports, // Use the actual queried balance
           singleSidedX
       );
-      console.log(`New on-chain position created: ${newPositionPubKey.toString()}. Range: [${newMinBinId}, ${newMaxBinId}], Created at Bin: ${newOriginalActiveBin}`);
+      console.log(`New on-chain position created: ${newPositionKey.toString()}. Range: [${newMinBinId}, ${newMaxBinId}], Created at Bin: ${newOriginalActiveBin}`);
 
       // Recalculate snapshot value based on ACTUAL deposited amount and current price
       const currentTargetTokenPrice = singleSidedX ? tokenXPrice : tokenYPrice;
       const newPositionSnapshotValue = actualTokenAmountDeposited.times(currentTargetTokenPrice).toNumber();
       console.log(`Calculated snapshot value for new position based on actual deposit: $${newPositionSnapshotValue.toFixed(4)}`);
 
-      console.log(`Transferring history from ${oldPositionKeyStr} to ${newPositionPubKey.toString()}`);
+      console.log(`Transferring history from ${oldPositionKeyStr} to ${newPositionKey.toString()}`);
       this.positionStorage.transferPositionHistory(
         oldPositionKey,
-        newPositionPubKey,
+        newPositionKey,
         {
           originalActiveBin: newOriginalActiveBin,
           minBinId: newMinBinId,
@@ -377,10 +377,10 @@ export class RebalanceManager {
       await this.positionStorage.removePosition(oldPositionKey); // Correct way
 
       // Update last rebalance time for the *new* position key
-      this.lastRebalanceTime[newPositionPubKey.toString()] = Date.now();
+      this.lastRebalanceTime[newPositionKey.toString()] = Date.now();
       delete this.lastRebalanceTime[oldPositionKeyStr];
 
-      console.log(`Rebalance complete for ${oldPositionKeyStr} -> ${newPositionPubKey.toString()}`);
+      console.log(`Rebalance complete for ${oldPositionKeyStr} -> ${newPositionKey.toString()}`);
 
     } catch (error) {
       console.error(`Error during rebalance process for ${oldPositionKeyStr}:`, error);
