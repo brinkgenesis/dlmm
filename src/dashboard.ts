@@ -64,6 +64,11 @@ export interface PositionData {
   positionAge?: number;
   originalStartDate?: number;
   positionAgeFormatted?: string;
+  pendingFeeX?: string;
+  pendingFeeY?: string;
+  totalFeeUsdClaimed?: number;
+  feeXValuePending?: number;
+  feeYValuePending?: number;
 }
 
 interface StoredPositionData {
@@ -179,6 +184,14 @@ export class Dashboard {
             positionData.baseFeeRate = parseFloat(marketData.base_fee_percentage);
           }
           
+          // Replace the token symbol overwriting code with fallback logic
+          if (!positionData.tokenXSymbol) {
+            positionData.tokenXSymbol = position.tokenX.publicKey.toString();
+          }
+          if (!positionData.tokenYSymbol) {
+            positionData.tokenYSymbol = position.tokenY.publicKey.toString();
+          }
+          
           try {
             // Get pool and DLMM instance
             const pool = position.lbPair;
@@ -258,10 +271,6 @@ export class Dashboard {
             // Add pool data
             positionData.poolAddress = poolAddress;
             
-            // Try to get token names/symbols correctly
-            positionData.tokenXSymbol = position.tokenX.publicKey.toString();
-            positionData.tokenYSymbol = position.tokenY.publicKey.toString();
-            
             // In getAllPositions() after calculating totalXAmount and totalYAmount:
             positionData.tokenXAmount = totalXAmount; // Example value: 5.25 BONK
             positionData.tokenYAmount = totalYAmount; // Example value: 0.4 SOL
@@ -270,12 +279,15 @@ export class Dashboard {
             
             // Add fee information
             try {
-              // Get fee info
-              const feeInfo = await dlmm.getFeeInfo();
-              if (feeInfo) {
-                // The value is already a percentage
-                const baseFeePercentage = feeInfo.baseFeeRatePercentage.toNumber();
-                positionData.baseFeeRate = baseFeePercentage;
+              // Only get fee info if not already set from market data
+              if (positionData.baseFeeRate === undefined) {
+                // Get fee info
+                const feeInfo = await dlmm.getFeeInfo();
+                if (feeInfo) {
+                  // The value is already a percentage
+                  const baseFeePercentage = feeInfo.baseFeeRatePercentage.toNumber();
+                  positionData.baseFeeRate = baseFeePercentage;
+                }
               }
               
               // Get pending rewards/fees
@@ -284,11 +296,27 @@ export class Dashboard {
                 const rawFeeX = lbPosition.positionData.feeX;
                 const rawFeeY = lbPosition.positionData.feeY;
                 
-                // Store raw values
-                positionData.feeX = rawFeeX ? rawFeeX.toString() : "0";
-                positionData.feeY = rawFeeY ? rawFeeY.toString() : "0";
+                // Store raw values - RENAME to clarify these are pending
+                positionData.pendingFeeX = rawFeeX ? rawFeeX.toString() : "0";
+                positionData.pendingFeeY = rawFeeY ? rawFeeY.toString() : "0";
                 
-                // Convert to actual token amounts
+                // NEW: Get claimed fee data from Meteora API
+                try {
+                  const meteoraData = await this.positionRepository.fetchPositionDataFromMeteora(positionKey);
+                  if (meteoraData) {
+                    positionData.totalClaimedFeeX = String(meteoraData.total_fee_x_claimed || 0);
+                    positionData.totalClaimedFeeY = String(meteoraData.total_fee_y_claimed || 0);
+                    positionData.totalFeeUsdClaimed = meteoraData.total_fee_usd_claimed || 0;
+                    // Use Meteora's APR/APY if available and better than our calculation
+                    if (meteoraData.fee_apr_24h > 0 && (!positionData.dailyAPR || meteoraData.fee_apr_24h > positionData.dailyAPR)) {
+                      positionData.dailyAPR = meteoraData.fee_apr_24h;
+                    }
+                  }
+                } catch (meteoraError) {
+                  console.error(`Error fetching Meteora data for position ${positionKey}:`, meteoraError);
+                }
+                
+                // Convert to actual token amounts for display
                 const tokenXDecimals = position.tokenX.decimal;
                 const tokenYDecimals = position.tokenY.decimal;
                 
@@ -319,9 +347,13 @@ export class Dashboard {
                   const feeXValue = feeXAmount.times(tokenXPrice);
                   const feeYValue = feeYAmount.times(tokenYPrice);
                   
-                  // Total fees in USD
+                  // Total pending fees in USD
                   const totalPendingFeesUSD = feeXValue.plus(feeYValue);
                   positionData.pendingFeesUSD = totalPendingFeesUSD.toNumber();
+
+                  // Store individual token fee values for display
+                  positionData.feeXValuePending = feeXValue.toNumber();
+                  positionData.feeYValuePending = feeYValue.toNumber();
                 } catch (error) {
                   console.error(`Error calculating USD values for fees:`, error);
                 }

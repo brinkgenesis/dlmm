@@ -119,32 +119,63 @@ app.get('/api/positions', async (req, res) => {
         liquidityAllocated: (summary.totalValue / summary.totalCapital) * 100,
         positions: summary.positions.map(position => ({
           ...position,
-          // Keep existing fields including the new symbol fields
+          // Keep existing fields
+          publicKey: position.publicKey,
           minBinId: position.minBinId,
           maxBinId: position.maxBinId,
-          currentPrice: position.currentPrice,       // Price in SOL
-          currentPriceUSD: position.currentPriceUSD, // Price in USD
+          currentPrice: position.currentPrice,       
+          currentPriceUSD: position.currentPriceUSD,
+          
+          // Fee data - combining both pending and claimed fees
+          // Pending fees (current unclaimed fees)
           pendingFeesUSD: position.pendingFeesUSD,
+          pendingFeeX: position.pendingFeeX,
+          pendingFeeY: position.pendingFeeY,
+          feeXValuePending: position.feeXValuePending,
+          feeYValuePending: position.feeYValuePending,
+          feeXAmount: position.feeXAmount,
+          feeYAmount: position.feeYAmount,
+          
+          // Claimed fees (historical claimed fees from Meteora API)
           totalClaimedFeeX: position.totalClaimedFeeX,
           totalClaimedFeeY: position.totalClaimedFeeY,
+          totalFeeUsdClaimed: position.totalFeeUsdClaimed,
+          
+          // APR and value data
           dailyAPR: position.dailyAPR,
           startingPositionValue: position.startingPositionValue,
           currentValue: position.currentValue,
+          
           // Token identification fields
-          tokenXSymbol: position.tokenXSymbol,  // Human-readable symbol
-          tokenYSymbol: position.tokenYSymbol,  // Human-readable symbol
-          tokenXMint: position.tokenXMint,      // Original mint address
-          tokenYMint: position.tokenYMint,      // Original mint address
-          tokenXLogo: position.tokenXLogo,      // Token X logo URL
-          tokenYLogo: position.tokenYLogo,      // Token Y logo URL
+          tokenXSymbol: position.tokenXSymbol,
+          tokenYSymbol: position.tokenYSymbol,
+          tokenXMint: position.tokenXMint,
+          tokenYMint: position.tokenYMint, 
+          tokenXLogo: position.tokenXLogo,
+          tokenYLogo: position.tokenYLogo,
+          tokenXAmount: position.tokenXAmount,
+          tokenYAmount: position.tokenYAmount,
+          tokenXValue: position.tokenXValue,
+          tokenYValue: position.tokenYValue,
+          
+          // Pool and status information
+          poolAddress: position.poolAddress,
+          status: position.status,
+          percentageThroughRange: position.percentageThroughRange,
+          currentActiveBin: position.currentActiveBin,
+          baseFeeRate: position.baseFeeRate,
+          
           // Add per-position liquidity allocation
           liquidityAllocation: summary.totalValue > 0 
             ? ((position.currentValue ?? 0) / summary.totalValue) * 100 
             : 0,
+            
           // Include both raw and formatted age data
           originalStartDate: position.originalStartDate || null,
-          positionAge: position.positionAge || 0, // Days only (already calculated)
-          positionAgeFormatted: position.positionAgeFormatted || 'New position'
+          positionAge: position.positionAge || 0,
+          positionAgeFormatted: position.positionAgeFormatted || 'New position',
+          rebalanceCount: position.rebalanceCount || 0,
+          lastUpdated: position.lastUpdated
         }))
       }
     });

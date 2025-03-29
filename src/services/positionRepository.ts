@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { PublicKey } from '@solana/web3.js';
+import axios from 'axios';
 
 // This matches the structure in your positions table
 interface SupabasePosition {
@@ -29,6 +30,21 @@ interface SupabasePosition {
   fee_history?: any; // We'll store this as JSONB
 }
 
+interface MeteoraPosData {
+  address: string;
+  pair_address: string;
+  owner: string;
+  total_fee_x_claimed: number; // int64
+  total_fee_y_claimed: number; // int64
+  total_reward_x_claimed: number;
+  total_reward_y_claimed: number;
+  total_fee_usd_claimed: number; // double
+  total_reward_usd_claimed: number;
+  fee_apy_24h: number;
+  fee_apr_24h: number;
+  daily_fee_yield: number;
+}
+
 export class PositionRepository {
   // Since auth is not required now, we'll use a default user ID
   private defaultUserId = 'default-user';
@@ -43,6 +59,9 @@ export class PositionRepository {
         .eq('position_key', positionKey)
         .single();
       
+      // NEW: Get claimed fee data from Meteora API
+      const meteoraData = await this.fetchPositionDataFromMeteora(positionKey);
+      
       // Format the data for Supabase
       const supabaseData = {
         user_id: this.defaultUserId,
@@ -56,9 +75,18 @@ export class PositionRepository {
         token_y_logo: positionData.tokenYLogo,
         min_bin_id: positionData.minBinId,
         max_bin_id: positionData.maxBinId,
+        // UPDATED: Rename these to pending fees for clarity
+        pending_fee_x: positionData.lastFeeX,
+        pending_fee_y: positionData.lastFeeY,
         pending_fees_usd: positionData.lastFeesUSD,
-        total_claimed_fee_x: positionData.lastFeeX,
-        total_claimed_fee_y: positionData.lastFeeY,
+        // NEW: Add claimed fees from Meteora
+        total_claimed_fee_x: meteoraData?.total_fee_x_claimed !== undefined 
+          ? String(meteoraData.total_fee_x_claimed) 
+          : null,
+        total_claimed_fee_y: meteoraData?.total_fee_y_claimed !== undefined 
+          ? String(meteoraData.total_fee_y_claimed) 
+          : null,
+        total_fee_usd_claimed: meteoraData?.total_fee_usd_claimed || null,
         daily_apr: positionData.dailyAPR,
         starting_position_value: positionData.startingPositionValue || positionData.snapshotPositionValue,
         current_value: positionData.lastPositionValue,
@@ -261,6 +289,9 @@ export class PositionRepository {
       // First check if we have market data for this pool
       const marketData = await this.getMarketDataForPool(poolAddress);
       
+      // NEW: Get claimed fee data from Meteora API
+      const meteoraData = await this.fetchPositionDataFromMeteora(positionKey);
+      
       // Check if position already exists
       const { data: existingPosition } = await supabase
         .from('positions')
@@ -283,9 +314,15 @@ export class PositionRepository {
         original_active_bin: positionData.originalActiveBin,
         min_bin_id: positionData.minBinId,
         max_bin_id: positionData.maxBinId,
+        // IMPORTANT: Current fees are different from claimed fees
         pending_fees_usd: positionData.lastFeesUSD,
-        total_claimed_fee_x: positionData.lastFeeX,
-        total_claimed_fee_y: positionData.lastFeeY,
+        // These fields now correctly represent PENDING fees (not claimed)
+        pending_fee_x: positionData.lastFeeX,
+        pending_fee_y: positionData.lastFeeY, 
+        // NEW: Use Meteora API data for claimed fees if available
+        total_claimed_fee_x: meteoraData?.total_fee_x_claimed || null,
+        total_claimed_fee_y: meteoraData?.total_fee_y_claimed || null,
+        total_fee_usd_claimed: meteoraData?.total_fee_usd_claimed || null,
         // Use market data for APR if position doesn't have it
         daily_apr: positionData.dailyAPR !== undefined ? positionData.dailyAPR : marketData?.daily_apr,
         starting_position_value: positionData.startingPositionValue || positionData.snapshotPositionValue,
@@ -429,6 +466,24 @@ export class PositionRepository {
     } catch (error) {
       console.error('Error loading positions in legacy format:', error);
       return {};
+    }
+  }
+
+  async fetchPositionDataFromMeteora(positionKey: string): Promise<MeteoraPosData | null> {
+    try {
+      console.log(`Fetching position data from Meteora API for: ${positionKey}`);
+      const response = await axios.get(`https://dlmm-api.meteora.ag/position/${positionKey}`);
+      
+      if (response.status === 200 && response.data) {
+        console.log(`Successfully fetched Meteora data for position ${positionKey}`);
+        return response.data;
+      } else {
+        console.warn(`No data returned from Meteora API for position ${positionKey}`);
+        return null;
+      }
+    } catch (error) {
+      console.error(`Error fetching position data from Meteora API: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
     }
   }
 }
