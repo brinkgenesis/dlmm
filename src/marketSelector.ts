@@ -215,7 +215,9 @@ export class MarketSelector {
     dlmm: DLMM,
     chosenMarket: MarketInfo,
     singleSidedX: boolean,
-    userDollarAmount?: number
+    userDollarAmount?: number,
+    takeProfitPrice?: number,  // NEW: Optional TP price
+    stopLossPrice?: number     // NEW: Optional SL price
   ): Promise<{ success: boolean, positionKey: string, message: string }> {
     try {
       // Use user-provided amount if present, otherwise use default or fall back to 1
@@ -384,6 +386,15 @@ export class MarketSelector {
       }
 
       if (finalPositionKey) {
+        // Set TP/SL if provided
+        if (takeProfitPrice || stopLossPrice) {
+          await this.positionRepository.setPositionTriggers(
+            finalPositionKey,
+            takeProfitPrice,
+            stopLossPrice
+          );
+        }
+
         return {
           success: true,
           positionKey: finalPositionKey,

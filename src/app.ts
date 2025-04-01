@@ -11,6 +11,7 @@ import { MarketSelector } from './marketSelector';
 import { UserConfig } from '../frontend/wallet/UserConfig';
 import bs58 from 'bs58';
 import DLMM, { LbPosition, LbPair, PositionInfo } from '@meteora-ag/dlmm';
+import { PositionTriggerMonitor } from './positionTriggerMonitor';
 
 export class TradingApp {
   private passiveManager?: PassiveProcessManager;
@@ -25,11 +26,13 @@ export class TradingApp {
   private marketSelector: MarketSelector;
   private delegationPDA?: PublicKey;
   private userPublicKey?: PublicKey;
+  private positionTriggerMonitor: PositionTriggerMonitor;
 
   constructor(
     public connection: Connection,
     public wallet: Keypair,
-    config: Config
+    config: Config,
+    positionRepository?: PositionRepository
   ) {
     console.log('Starting DLMM Manager...');
     this.config = config;
@@ -38,7 +41,7 @@ export class TradingApp {
     this.positionStorage = new PositionStorage(this.config);
     console.log('Position storage initialized');
     
-    this.positionRepository = new PositionRepository();
+    this.positionRepository = positionRepository || new PositionRepository();
     console.log('Position repository initialized');
     
     this.riskManager = new RiskManager(this.connection, this.wallet, this.config, this.positionStorage);
@@ -53,21 +56,33 @@ export class TradingApp {
       this.positionStorage,
       this.config
     );
+
+    this.positionTriggerMonitor = new PositionTriggerMonitor(
+      this.connection,
+      this.wallet,
+      this.config,
+      this.positionRepository
+    );
   }
 
   public async initialize() {
     console.log('Initializing TradingApp...');
     
+    // Sync positions with chain first
     await this.syncPositionsState();
     
+    // Initialize passive processes
     await this.initializePassiveProcesses();
     
+    // Start all monitoring processes
+    if (this.passiveManager) {
+      await this.passiveManager.startAll();
+    }
+    this.positionTriggerMonitor.startMonitoring();
     this.startRiskManagement();
-    
     this.startRebalanceMonitoring();
     
     console.log(`Markets loaded: ${this.marketSelector.markets.length} available markets`);
-    
     console.log('✅ DLMM Manager fully initialized with all managers running');
   }
 
