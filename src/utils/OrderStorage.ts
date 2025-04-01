@@ -1,5 +1,3 @@
-import fs from 'fs/promises';
-import path from 'path';
 import { PublicKey } from '@solana/web3.js';
 import { OrderRepository } from '../services/orderRepository';
 
@@ -14,84 +12,89 @@ interface StoredOrder {
   };
   poolAddress: string;
   createdAt: string;
+  positionKey?: string; // Optional field for linking TP/SL orders to specific positions
 }
 
 export class OrderStorage {
-  private filePath: string;
   private orderRepository: OrderRepository;
-  private supabaseEnabled: boolean = true;
+  private defaultUserId: string = 'default-user'; // Using a default user until auth is implemented
 
   constructor() {
-    this.filePath = path.join(__dirname, 'data', 'orders-mainnet.json');
     this.orderRepository = new OrderRepository();
-    console.log('OrderStorage initialized at:', this.filePath);
-    this.initializeStorage();
-  }
-
-  private async initializeStorage() {
-    try {
-      await fs.access(this.filePath);
-    } catch {
-      await fs.writeFile(this.filePath, '{}', 'utf-8');
-    }
+    console.log('OrderStorage initialized with Supabase repository');
   }
 
   public async addOrder(order: StoredOrder): Promise<void> {
-    const orders = await this.loadOrders();
-    orders[order.orderId] = order;
-    console.log('Saving order:', order.orderId);
-    await this.saveOrders(orders);
-    
-    // Also save to Supabase if enabled
-    if (this.supabaseEnabled) {
-      try {
-        // Use a default userId since auth is not required yet
-        await this.orderRepository.submitOrder('default-user', {
+    try {
+      await this.orderRepository.submitOrder(
+        this.defaultUserId,
+        {
           poolAddress: order.poolAddress,
           orderType: order.config.orderType,
           triggerPrice: order.config.triggerPrice,
           sizeUSD: order.config.orderSize,
           closeBps: order.config.closeBps,
-          side: order.config.side
-        });
-      } catch (error) {
-        console.error('Error saving order to Supabase:', error);
-        // Continue with normal operation
-      }
+          side: order.config.side,
+          positionKey: order.positionKey // Pass through positionKey if defined
+        }
+      );
+      console.log(`Order ${order.orderId} saved to Supabase`);
+    } catch (error) {
+      console.error('Error saving order to Supabase:', error);
+      throw new Error('Failed to save order to database');
     }
   }
 
   public async deleteOrder(orderId: string): Promise<void> {
-    const orders = await this.loadOrders();
-    if (orders[orderId]) {
-      console.log('Deleting order:', orderId);
-      delete orders[orderId];
-      await this.saveOrders(orders);
+    try {
+      // Instead of deleting, mark as cancelled
+      await this.orderRepository.updateOrderStatus(orderId, 'CANCELLED');
+      console.log(`Order ${orderId} marked as cancelled in Supabase`);
+    } catch (error) {
+      console.error('Error updating order status:', error);
+      throw new Error('Failed to update order status');
     }
   }
 
   public async getActiveOrders(): Promise<Record<string, StoredOrder>> {
-    return this.loadOrders();
-  }
-
-  private async loadOrders(): Promise<Record<string, StoredOrder>> {
     try {
-      const data = await fs.readFile(this.filePath, 'utf-8');
-      console.log('Loaded orders from:', this.filePath);
-      return JSON.parse(data);
+      // Get all pending orders
+      const pendingOrders = await this.orderRepository.getPendingOrders();
+      
+      // Convert to StoredOrder format
+      const activeOrders: Record<string, StoredOrder> = {};
+      
+      pendingOrders.forEach(order => {
+        activeOrders[order.id] = {
+          orderId: order.id,
+          config: {
+            orderType: order.order_type,
+            triggerPrice: order.trigger_price,
+            orderSize: order.size_usd,
+            closeBps: order.close_bps,
+            side: order.side
+          },
+          poolAddress: order.pool_address,
+          createdAt: order.created_at,
+          positionKey: order.position_key
+        };
+      });
+      
+      console.log(`Loaded ${Object.keys(activeOrders).length} active orders from Supabase`);
+      return activeOrders;
     } catch (error) {
-      console.error('Error loading orders:', error);
+      console.error('Error loading orders from Supabase:', error);
       return {};
     }
   }
-
-  private async saveOrders(orders: Record<string, StoredOrder>): Promise<void> {
+  
+  public async updateOrderStatus(orderId: string, status: 'EXECUTED' | 'FAILED' | 'CANCELLED'): Promise<void> {
     try {
-      await fs.writeFile(this.filePath, JSON.stringify(orders, null, 2), 'utf-8');
-      console.log('Successfully saved orders to:', this.filePath);
+      await this.orderRepository.updateOrderStatus(orderId, status === 'FAILED' ? 'CANCELLED' : status);
+      console.log(`Order ${orderId} status updated to ${status} in Supabase`);
     } catch (error) {
-      console.error('Failed to save orders:', error);
-      throw new Error('Failed to persist orders to storage');
+      console.error(`Error updating order ${orderId} status to ${status}:`, error);
+      throw new Error('Failed to update order status');
     }
   }
 } 

@@ -35,6 +35,8 @@ interface SupabasePosition {
   previous_position_key?: string;
   fee_history?: any;
   updated_at?: string;
+  take_profit_price?: number;
+  stop_loss_price?: number;
 }
 
 interface MeteoraPosData {
@@ -569,6 +571,150 @@ export class PositionRepository {
       }
     } catch (error) {
       console.error(`Exception removing position ${positionKey} from Supabase:`, error);
+    }
+  }
+
+  /**
+   * Sets a take profit price for a position
+   * @param positionKey The position's public key
+   * @param takeProfitPrice The take profit price to set
+   */
+  async setTakeProfitForPosition(positionKey: string, takeProfitPrice: number): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('positions')
+        .update({ take_profit_price: takeProfitPrice })
+        .eq('position_key', positionKey)
+        .eq('user_id', this.defaultUserId);
+        
+      if (error) throw error;
+      console.log(`Take profit set for position ${positionKey}: $${takeProfitPrice}`);
+    } catch (error) {
+      console.error(`Error setting take profit for position ${positionKey}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Sets a stop loss price for a position
+   * @param positionKey The position's public key
+   * @param stopLossPrice The stop loss price to set
+   */
+  async setStopLossForPosition(positionKey: string, stopLossPrice: number): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('positions')
+        .update({ stop_loss_price: stopLossPrice })
+        .eq('position_key', positionKey)
+        .eq('user_id', this.defaultUserId);
+        
+      if (error) throw error;
+      console.log(`Stop loss set for position ${positionKey}: $${stopLossPrice}`);
+    } catch (error) {
+      console.error(`Error setting stop loss for position ${positionKey}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Gets all positions that have take profit or stop loss prices set
+   * @returns Array of positions with triggers
+   */
+  async getPositionsWithTriggers(): Promise<SupabasePosition[]> {
+    try {
+      const { data, error } = await supabase
+        .from('positions')
+        .select('*')
+        .or('take_profit_price.gte.0,stop_loss_price.gte.0')
+        .eq('user_id', this.defaultUserId);
+        
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching positions with triggers:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Sets both take profit and stop loss prices for a position
+   * @param positionKey The position's public key
+   * @param takeProfitPrice The take profit price (optional)
+   * @param stopLossPrice The stop loss price (optional)
+   */
+  async setPositionTriggers(
+    positionKey: string, 
+    takeProfitPrice?: number, 
+    stopLossPrice?: number
+  ): Promise<void> {
+    try {
+      const updates: Record<string, any> = {};
+      
+      if (takeProfitPrice !== undefined) {
+        updates.take_profit_price = takeProfitPrice;
+      }
+      
+      if (stopLossPrice !== undefined) {
+        updates.stop_loss_price = stopLossPrice;
+      }
+      
+      if (Object.keys(updates).length === 0) {
+        return; // Nothing to update
+      }
+      
+      const { error } = await supabase
+        .from('positions')
+        .update(updates)
+        .eq('position_key', positionKey)
+        .eq('user_id', this.defaultUserId);
+        
+      if (error) throw error;
+      
+      console.log(`Triggers set for position ${positionKey}: TP=${takeProfitPrice}, SL=${stopLossPrice}`);
+    } catch (error) {
+      console.error(`Error setting triggers for position ${positionKey}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Clears the take profit and/or stop loss for a position
+   * @param positionKey The position's public key
+   * @param clearTakeProfit Whether to clear take profit
+   * @param clearStopLoss Whether to clear stop loss
+   */
+  async clearPositionTriggers(
+    positionKey: string,
+    clearTakeProfit: boolean = true,
+    clearStopLoss: boolean = true
+  ): Promise<void> {
+    try {
+      const updates: Record<string, any> = {};
+      
+      if (clearTakeProfit) {
+        updates.take_profit_price = null;
+      }
+      
+      if (clearStopLoss) {
+        updates.stop_loss_price = null;
+      }
+      
+      if (Object.keys(updates).length === 0) {
+        return; // Nothing to clear
+      }
+      
+      const { error } = await supabase
+        .from('positions')
+        .update(updates)
+        .eq('position_key', positionKey)
+        .eq('user_id', this.defaultUserId);
+        
+      if (error) throw error;
+      
+      console.log(`Triggers cleared for position ${positionKey}`);
+    } catch (error) {
+      console.error(`Error clearing triggers for position ${positionKey}:`, error);
+      throw error;
     }
   }
 }

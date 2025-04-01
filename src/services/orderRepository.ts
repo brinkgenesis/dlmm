@@ -8,6 +8,7 @@ export class OrderRepository {
     sizeUSD?: number;
     closeBps?: number;
     side?: 'X' | 'Y';
+    positionKey?: string;
   }) {
     const { data, error } = await supabase
       .from('orders')
@@ -19,6 +20,7 @@ export class OrderRepository {
         size_usd: orderData.sizeUSD,
         close_bps: orderData.closeBps,
         side: orderData.side,
+        position_key: orderData.positionKey,
         status: 'PENDING'
       })
       .select()
@@ -73,5 +75,19 @@ export class OrderRepository {
 
     if (error) throw new Error(`Failed to retrieve pending orders: ${error.message}`);
     return data;
+  }
+
+  async updateOrderWithError(orderId: string, errorMessage: string): Promise<void> {
+    const { error } = await supabase
+      .from('orders')
+      .update({
+        status: 'CANCELLED',
+        error_reason: errorMessage,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', orderId);
+
+    if (error) throw new Error(`Failed to update order error: ${error.message}`);
+    return;
   }
 } 
