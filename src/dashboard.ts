@@ -69,6 +69,8 @@ export interface PositionData {
   totalFeeUsdClaimed?: number;
   feeXValuePending?: number;
   feeYValuePending?: number;
+  takeProfitPrice?: number;
+  stopLossPrice?: number;
 }
 
 interface StoredPositionData {
@@ -173,7 +175,9 @@ export class Dashboard {
             tokenYMint: position.tokenY.publicKey.toString(),
             // --- Default symbols to mint if market data fails ---
            
-            lastUpdated: new Date().toISOString()
+            lastUpdated: new Date().toISOString(),
+            takeProfitPrice: undefined,
+            stopLossPrice: undefined
           };
           
           // Use market data if available
@@ -394,6 +398,13 @@ export class Dashboard {
               positionData.positionAgeFormatted = formattedAge.trim();
             } else {
               positionData.positionAgeFormatted = 'New position';
+            }
+
+            // Fetch the take profit/stop loss data from Supabase
+            const dbPosition = await this.positionRepository.getPositionByKey(positionKey);
+            if (dbPosition) {
+              positionData.takeProfitPrice = dbPosition.take_profit_price;
+              positionData.stopLossPrice = dbPosition.stop_loss_price;
             }
           } catch (error) {
             console.error(`Error processing on-chain data for position ${positionKey}:`, error);

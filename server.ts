@@ -15,6 +15,7 @@ import { Config } from './src/models/Config';
 import { OrderRepository } from './src/services/orderRepository';
 import { MarketRepository } from './src/services/marketRepository';
 import { SelectionIndexer } from './src/SelectionIndexer';
+import { PositionRepository } from './src/services/positionRepository';
 dotenv.config();
 
 // Initialize core components
@@ -26,6 +27,7 @@ const config = Config.loadSync();
 const tradingApp = new TradingApp(connection, wallet, config);
 const orderRepository = new OrderRepository();
 const marketRepository = new MarketRepository();
+const positionRepository = new PositionRepository();
 
 // Express setup
 const app = express();
@@ -175,7 +177,11 @@ app.get('/api/positions', async (req, res) => {
           positionAge: position.positionAge || 0,
           positionAgeFormatted: position.positionAgeFormatted || 'New position',
           rebalanceCount: position.rebalanceCount || 0,
-          lastUpdated: position.lastUpdated
+          lastUpdated: position.lastUpdated,
+          
+          // Add take profit and stop loss
+          takeProfitPrice: position.takeProfitPrice,
+          stopLossPrice: position.stopLossPrice,
         }))
       }
     });
@@ -334,7 +340,8 @@ app.get('/api/markets', async (req, res) => {
 
 app.post('/api/markets/select', async (req, res) => {
   try {
-    const { poolAddress, singleSidedX, dollarAmount } = req.body;
+    // Extract take profit and stop loss parameters from the request
+    const { poolAddress, singleSidedX, dollarAmount, takeProfitPrice, stopLossPrice } = req.body;
     if (!poolAddress) {
       res.status(400).json({ success: false, error: 'Pool address is required' });
       return;
@@ -358,29 +365,32 @@ app.post('/api/markets/select', async (req, res) => {
     // Use the existing methods in sequence
     const dlmm = await marketSelector.initializeSelectedMarket(chosenMarket);
     
-    // Pass the dollarAmount parameter to createPositionInSelectedMarket
-    // If not provided, it will use the default value in the method
+    // Pass all parameters, including take profit and stop loss
     const creationStatus = await marketSelector.createPositionInSelectedMarket(
       dlmm, 
       chosenMarket, 
       singleSidedX === undefined ? true : singleSidedX,
-      dollarAmount // Pass the user-specified dollar amount
+      dollarAmount, // Pass the user-specified dollar amount
+      takeProfitPrice, // Pass take profit price
+      stopLossPrice   // Pass stop loss price
     );
     
     if (creationStatus.success) {
         res.json({
           success: true,
           message: creationStatus.message,
-          positionKey: creationStatus.positionKey, // Optionally return the new key
+          positionKey: creationStatus.positionKey,
           market: chosenMarket.name,
           side: singleSidedX ? 'Token X' : 'Token Y',
-          amount: `$${dollarAmount || chosenMarket.defaultDollarAmount || 1}` // Amount might be slightly different due to safetyFactor
+          amount: `$${dollarAmount || chosenMarket.defaultDollarAmount || 1}`,
+          takeProfitPrice: takeProfitPrice, // Include in response
+          stopLossPrice: stopLossPrice      // Include in response
         });
     } else {
         // If creation failed (on-chain or saving)
         res.status(500).json({
           success: false,
-          error: creationStatus.message // Return the error message from the creation process
+          error: creationStatus.message
         });
     }
   } catch (error) {
@@ -727,6 +737,46 @@ app.get('/api/markets/filtered', async (req, res) => {
   } catch (error) {
     console.error('Error fetching filtered markets:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch markets' });
+  }
+});
+
+app.post('/api/positions/triggers', async (req, res) => {
+  try {
+    const { positionKey, takeProfitPrice, stopLossPrice } = req.body;
+    
+    if (!positionKey) {
+      res.status(400).json({ success: false, error: 'Position key is required' });
+      return;
+    }
+    
+    // Check if at least one of TP or SL is provided
+    if (takeProfitPrice === undefined && stopLossPrice === undefined) {
+      res.status(400).json({ success: false, error: 'At least one of takeProfitPrice or stopLossPrice must be provided' });
+      return;
+    }
+    
+    const positionRepository = new PositionRepository();
+    
+    // Set the triggers
+    await positionRepository.setPositionTriggers(
+      positionKey,
+      takeProfitPrice,
+      stopLossPrice
+    );
+    
+    res.json({
+      success: true,
+      message: 'Position triggers updated successfully',
+      positionKey,
+      takeProfitPrice,
+      stopLossPrice
+    });
+  } catch (error) {
+    console.error('Error setting position triggers:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown server error'
+    });
   }
 });
 

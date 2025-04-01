@@ -648,6 +648,18 @@ export class PositionRepository {
     stopLossPrice?: number
   ): Promise<void> {
     try {
+      // Validate that take profit is greater than stop loss if both are provided
+      if (takeProfitPrice !== undefined && stopLossPrice !== undefined && 
+          takeProfitPrice <= stopLossPrice) {
+        throw new Error('Take profit price must be greater than stop loss price');
+      }
+      
+      // Validate prices are positive if provided
+      if ((takeProfitPrice !== undefined && takeProfitPrice <= 0) || 
+          (stopLossPrice !== undefined && stopLossPrice <= 0)) {
+        throw new Error('Trigger prices must be greater than zero');
+      }
+      
       const updates: Record<string, any> = {};
       
       if (takeProfitPrice !== undefined) {
