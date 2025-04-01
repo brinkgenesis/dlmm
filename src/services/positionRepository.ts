@@ -52,6 +52,9 @@ interface MeteoraPosData {
   daily_fee_yield: number;
 }
 
+// Helper function for async delay
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 export class PositionRepository {
   // Since auth is not required now, we'll use a default user ID
   private defaultUserId = 'default-user';
@@ -486,22 +489,68 @@ export class PositionRepository {
     }
   }
 
+  // Updated fetchPositionDataFromMeteora with retry logic
   async fetchPositionDataFromMeteora(positionKey: string): Promise<MeteoraPosData | null> {
-    try {
-      console.log(`Fetching position data from Meteora API for: ${positionKey}`);
-      const response = await axios.get(`https://dlmm-api.meteora.ag/position/${positionKey}`);
-      
-      if (response.status === 200 && response.data) {
-        console.log(`Successfully fetched Meteora data for position ${positionKey}`);
-        return response.data;
-      } else {
-        console.warn(`No data returned from Meteora API for position ${positionKey}`);
-        return null;
+    const maxRetries = 3;
+    let currentDelay = 500; // Start with 500ms delay
+    const url = `https://dlmm-api.meteora.ag/position_v2/${positionKey}`;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`Attempt ${attempt}: Fetching position data from Meteora API for: ${positionKey}`);
+        const response = await axios.get(url, { timeout: 15000 }); // 15 sec timeout
+
+        if (response.status === 200 && response.data) {
+          console.log(`Successfully fetched Meteora data for position ${positionKey} on attempt ${attempt}`);
+          // Ensure the response contains expected fields before returning
+          if (typeof response.data.total_fee_x_claimed !== 'undefined') {
+             return response.data as MeteoraPosData;
+          } else {
+             console.warn(`Meteora API response for ${positionKey} missing expected fields. Status: ${response.status}`);
+             return null; // Treat malformed success as failure for this purpose
+          }
+        } else {
+          // Handle non-200 success codes if necessary, though unlikely for GET
+          console.warn(`Meteora API returned non-200 status ${response.status} for ${positionKey}`);
+          // Decide whether to retry or fail based on status if needed
+          // For now, we'll let this fall through to the catch block if axios throws for non-2xx
+        }
+      } catch (error) {
+        console.error(`Attempt ${attempt} failed for ${positionKey}: ${error instanceof Error ? error.message : String(error)}`);
+
+        // Check if the error is from Axios and has a response status
+        if (axios.isAxiosError(error) && error.response) {
+          const statusCode = error.response.status;
+          // Retry only on 5xx server errors
+          if (statusCode >= 500 && statusCode < 600) {
+            if (attempt < maxRetries) {
+              console.log(`Server error (${statusCode}). Retrying in ${currentDelay}ms...`);
+              await delay(currentDelay);
+              currentDelay *= 2; // Exponential backoff
+              continue; // Go to the next attempt
+            } else {
+              console.error(`Max retries (${maxRetries}) reached for ${positionKey} after server error.`);
+              break; // Exit loop after max retries
+            }
+          } else {
+            // Don't retry for 4xx client errors (like 404 Not Found) or other non-5xx issues
+            console.warn(`Non-retryable error status ${statusCode} for ${positionKey}. Aborting fetch.`);
+            break; // Exit loop, won't retry
+          }
+        } else {
+           // Network errors or other issues not related to HTTP status
+           console.error(`Network or unknown error fetching ${positionKey}. Aborting fetch.`);
+           break; // Exit loop, won't retry
+        }
       }
-    } catch (error) {
-      console.error(`Error fetching position data from Meteora API: ${error instanceof Error ? error.message : String(error)}`);
-      return null;
+      // Should only reach here if a non-error, non-200 status was somehow encountered
+      // Or if axios didn't throw an error for a non-2xx response (unlikely with default config)
+      break;
     }
+
+    // If the loop completes without returning data
+    console.error(`Failed to fetch Meteora data for position ${positionKey} after all attempts.`);
+    return null;
   }
 
   // removePosition remains the same, ensure it targets user_id

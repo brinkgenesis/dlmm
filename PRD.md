@@ -28,29 +28,30 @@ Price ranges for positions are typically within -3% to +3% of the current market
 ---
 5. Functional Requirements
 5.1. Liquidity Management
-Add Liquidity: Allocate assets to DLMM pools based on selected strategies when market conditions are favorable and within the specified price range.
-Remove Liquidity: Withdraw assets from DLMM pools when the market price moves outside the predefined price range or when volatility exceeds thresholds.
-Automatic Position Adjustment: Close existing positions and open new ones adjusted to the current market price when the price moves out of the specified range.
-Configurable Position Parameters: Allow users to set the size of the position and desired price range for operation.
+Add Liquidity: ✅ Implemented via `marketSelector.ts`.
+Remove Liquidity: ✅ Implemented as part of rebalancing (`rebalanceManager.ts`), risk management (`riskManager.ts`), and potentially orders (`orderManager.ts`).
+Automatic Position Adjustment: ✅ Implemented in `rebalanceManager.ts` based on price range breach. Closes old and creates new single-sided position.
+Configurable Position Parameters: ✅ Position size (via dollar amount) and side selectable via API. Range is dynamically set around the active bin.
 5.2. Market Monitoring
-Real-time Monitoring: Constantly monitor selected liquidity pools to ensure positions remain within pre-set price ranges.
-Volatility Detection: Monitor price volatility of token pairs in real-time and adjust positions based on volatility thresholds.
-Price Range Tracking: Keep track of the current price relative to the user-defined price bands.
+Real-time Monitoring: ✅ `rebalanceManager.ts` checks active bin relative to position range periodically.
+Volatility Detection: 🛠 Basic volume drop detection in `riskManager.ts`. Advanced volatility analysis (e.g., Volatility Accumulator) not implemented.
+Price Range Tracking: ✅ Core logic in `rebalanceManager.ts`.
 5.3. Strategy Implementation
-Spot Strategy: Provide uniform liquidity distribution suitable for stable market conditions.
-Curve Strategy: Concentrate liquidity around the current price to maximize capital efficiency.
-Bid-Ask Strategy: Allocate liquidity at both ends of the price range to capture volatility swings.
-Dynamic Fee Optimization: Leverage Meteora's dynamic fees to maximize earnings by providing liquidity during high-fee periods within acceptable volatility thresholds.
+Spot Strategy: 🛠 Not explicitly implemented as a primary strategy; rebalancing uses single-sided.
+Curve Strategy: ❌ Not Implemented.
+Bid-Ask Strategy: ✅ `BidAskImBalanced` used for single-sided creation/rebalancing.
+Dynamic Fee Optimization: ❌ Not Implemented (uses pool's base fee).
 5.4. Notifications and Alerts
-Automated Alerts: Send notifications regarding liquidity position changes, range breaches, and position adjustments.
-Error Handling: Alert on failed transactions or system errors to allow prompt intervention.
-Performance Summaries: Provide periodic summaries of position performance and earnings.
+Automated Alerts: ❌ Not Implemented (Requires `alerting_system.ts`).
+Error Handling: ✅ Basic logging implemented throughout. Formal alerting missing.
+Performance Summaries: ✅ Provided via `/api/positions` endpoint (`dashboard.ts`).
 5.5. Reporting
-Performance Metrics: Generate reports on fees collected, IL avoided, and overall performance of the liquidity positions.
-Real-time Analytics: Provide insights on position performance, including fees earned, price movements, and range efficiency.
-Historical Data: Store transaction history and position adjustments for analysis and auditing purposes.
+Performance Metrics: ✅ Basic PnL, current value, fees (pending/claimed via Meteora API) available via `dashboard.ts`.
+Real-time Analytics: ✅ Dashboard provides real-time enriched data.
+Historical Data: ✅ Stored in Supabase DB via `positionRepository.ts` and `marketRepository.ts`.
+Impermanent Loss Calculation: ❌ Not Implemented.
 
-Other items: Needs to calculate potential IL of positions and simulate them for the pool before determining that it is a good opportunity. 
+Other items: IL calculation - Not Implemented.
 
 Ex: If we expect both pools to have a delta of 20% within X time period, we need to calculate the amount of IL incured and measure it aganist the potential fees (via volume and volitality) and net expected outcomes in %. We also need to factor in negative market movements. Ex if token A Sol goes down 10%, and memecoin goes down 30% in same time frame. We will take .78% impemenant loss and roughly -20% from the token dropping. If tokens range that is the ideal condition. If the market goes up, we will get more of the base token as a profit taking practice. We can also weight this vs market conditions to come up with EV of three scenarios: market goes up, market ranges, market goes down. The former two are ideal situations, with the latter being non-ideal. 
 ---
@@ -84,28 +85,22 @@ As an analyst, I want to review real-time analytics and performance reports to a
 ---
 8. Technical Requirements
 8.1. Architecture
-Backend: A serverless application using AWS Lambda and AWS API Gateway for handling bot logic and API interactions.
-Database: AWS DynamoDB or AWS RDS for storing configuration settings, transaction history, and performance data.
-Monitoring: AWS CloudWatch and AWS X-Ray for logs, monitoring, and alerts.
-Optional Frontend: A lightweight dashboard (built with React or similar) for monitoring and configuring bot settings.
+Backend: ✅ Express.js server (`server.ts`) interacting with core logic in `src`. Not serverless Lambda.
+Database: ✅ Supabase (Postgres) used via `positionRepository`, `marketRepository`, `orderRepository`.
+Monitoring: ✅ Basic console logging. CloudWatch integration depends on deployment, not inherent in code.
+Optional Frontend: ✅ Backend API exists to support a frontend.
 8.2. Integrations
-Meteora DLMM SDK: Utilize the @meteora-ag/dlmm NPM package for interacting with DLMM pools.
-Meteora APIs: Interact with endpoints provided by Meteora DLMM API for real-time data.
-Wallet Integration: Securely interact with wallets for signing transactions using frameworks compatible with Solana.
+Meteora DLMM SDK: ✅ Used extensively (`@meteora-ag/dlmm`).
+Meteora APIs: ✅ Used for market data (`marketRepository.ts`) and position fee data (`positionRepository.ts`).
+Wallet Integration: ✅ Uses `Keypair` for signing. Basic delegated signing structure in `server.ts`, full implementation pending. Jupiter API used for prices.
 8.3. Strategy Implementation
-8.3.1. Automatic Position Adjustment
-Implement logic to close and reopen positions when the market price moves outside the user-defined price range.
-Adjust positions to the new market price, maintaining the same parameters (e.g., position size and range percentage).
-8.3.2. Volatility Monitoring
-Implement algorithms to calculate real-time volatility using the Volatility Accumulator as described in Meteora's Dynamic Fees Documentation.
-Define thresholds for volatility that trigger liquidity withdrawal and re-entry.
-8.3.3. Liquidity Adjustment Logic
-Use predefined strategies (Spot, Curve, Bid-Ask) as templates for liquidity distribution.
-Optimize liquidity provision based on real-time market conditions and fee structures.
+Automatic Position Adjustment: ✅ Implemented in `rebalanceManager.ts`.
+Volatility Monitoring: ❌ Volatility Accumulator logic not implemented.
+Liquidity Adjustment Logic: ✅ Uses standard SDK strategies (BidAskImbalanced).
 8.4. Security
-AWS Secrets Manager: Use for handling API keys, wallet credentials, and other sensitive configuration.
-Secure Key Management: Implement best practices for managing and storing private keys.
-Role-Based Access Control (RBAC): If a dashboard is provided, enforce RBAC to control access to different functionalities.
+AWS Secrets Manager: ✅ Assumed via `.env` loading (`dotenv` package used).
+Secure Key Management: ✅ Uses `Keypair` loading, `withSafeKeypair` utility exists.
+Role-Based Access Control (RBAC): 🛠 Basic JWT auth structure in `server.ts` for wallet verification, not full RBAC.
 8.5. Testing
 Unit Tests: Implement unit tests for all critical components using Jest or a similar framework.
 Integration Tests: Test interactions with Meteora DLMM SDK and APIs, including transaction execution.
@@ -137,18 +132,18 @@ Mitigation: Implement high-availability architectures, regular backups, and robu
 ---
 12. Strategy Suggestions
 12.1. Automated Range Monitoring
-Continuous Monitoring: The bot continuously monitors the specified liquidity pool to ensure positions remain within the pre-set price range (e.g., -3% to +3% of the current price).
-Automatic Adjustments: When the price moves out of the specified range, the bot automatically closes the existing position and opens a new one adjusted to the new market price.
+Continuous Monitoring: ✅ Implemented via `rebalanceManager.ts` interval checks.
+Automatic Adjustments: ✅ Implemented in `rebalanceManager.ts`.
 12.2. Dynamic Fee Optimization
-Monitor Dynamic Fees: Leverage Meteora's dynamic fees to identify periods when fees are higher due to increased volatility.
-Fee Maximization: Provide liquidity during high-fee periods within acceptable volatility thresholds to maximize earnings.
+Monitor Dynamic Fees: ❌ Not Implemented.
+Fee Maximization: ❌ Not Implemented.
 12.3. Advanced Strategies
-Ranged Limit Orders: Implement logic to place liquidity at specific price ranges in anticipation of future price movements.
-Dollar-Cost Averaging (DCA): Utilize the Bid-Ask strategy to gradually accumulate or offload positions while earning fees.
-Volatility Capture: Use the Volatility Accumulator to determine optimal times to enter or exit liquidity positions.
+Ranged Limit Orders: 🛠 `orderManager.ts` exists, potentially usable for this.
+Dollar-Cost Averaging (DCA): 🛠 Possible via repeated single-sided LIMIT orders.
+Volatility Capture: ❌ Requires volatility analysis implementation.
 12.4. Farming Rewards
-Maximize Rewards: Participate in DLMM farming as described in Meteora's DLMM Farming Rewards by ensuring liquidity is provided in the active bin.
-Automated Reward Management: Automate the claiming of farming rewards and swap fees to compound earnings.
+Maximize Rewards: *Implicitly done by being in active range*.
+Automated Reward Management: ✅ Basic auto-claim/compound structure in `passiveProcess.ts`/`autoCompounder.ts`.
 ---
 13. API and SDK Usage
 13.1. SDK Functions
@@ -160,11 +155,11 @@ getDynamicFee: To obtain current dynamic fee rates and optimize liquidity provis
 Utilize endpoints from Meteora DLMM API for real-time data and transaction execution, as documented in the Meteora DLMM API Swagger UI.
 ---
 14. Deliverables
-Source Code: A well-documented codebase of the bot.
-Deployment Scripts: Configuration files and scripts for deploying the application on AWS.
-Documentation: Comprehensive documentation for setup, configuration, operation, and maintenance.
-Test Cases and Results: Unit and integration test cases along with their results.
-Performance Reports: Analytics dashboards and performance reports showcasing the bot's effectiveness.
+Source Code: ✅ Provided.
+Deployment Scripts: *Not provided/User responsibility*.
+Documentation: ✅ PRD, Core Strategy, Mermaid being updated. Code has comments.
+Test Cases and Results: *Not provided/User responsibility*.
+Performance Reports: ✅ Backend API provides data for reporting.
 ---
 15. Timeline
 Week 1-2: Requirement analysis, architectural design, and setup of AWS infrastructure.
