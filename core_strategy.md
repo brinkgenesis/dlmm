@@ -90,7 +90,6 @@
 
 ## 3. Core Liquidity Strategies
 ### 3.1 Single-Sided (BidAskImBalanced)
-*(Note: Assumes single-sided implies BidAskImbalanced for rebalancing/entry)*
 **Parameters**:
 - ✅ Range: Set dynamically around active bin in `createSingleSidePosition.ts` (69 bins wide).
 - Bin density: *Implicitly set by DLMM pool's `binStep`*.
@@ -100,14 +99,15 @@
 
 **Exit Triggers**:
 - ✅ Range Breach: Handled by `rebalanceManager.ts`.
-- Price +X%: *Handled by `orderManager.ts` if TP order is set*.
+- ✅ Price +X%: Implemented via `positionTriggerMonitor.ts` for take profit orders.
+- ✅ Price -X%: Implemented via `positionTriggerMonitor.ts` for stop loss orders.
 - Consolidation cycles: *Not Implemented*.
 - Time expiration: *Not Implemented*.
 
-**Implementation Status**: ✅ Completed (for core creation/rebalancing)
+**Implementation Status**: ✅ Completed (for core creation/rebalancing and basic exit triggers)
 - `createSingleSidePosition.ts` implements single-sided creation using `StrategyType.BidAskImBalanced`.
 - `rebalanceManager.ts` closes and creates new single-sided positions on range breach.
-- `orderManager.ts` exists for potential TP/SL orders.
+- `positionTriggerMonitor.ts` monitors and executes take profit and stop loss orders.
 
 ### 3.2 Balanced Spot Strategy
 *(Note: Current implementation focuses on single-sided; balanced Spot not explicitly used)*
@@ -181,22 +181,28 @@ graph TD
     A --> D[OrderRepository for DB]
     B --> F[Check Trigger Conditions]
     C --> G[createSingleSidePosition / removeLiquidity / closePosition]
+    
+    P[PositionTriggerMonitor] --> Q[Position Monitoring via DLMM SDK]
+    P --> R[Position Repository]
+    Q --> S[Check TP/SL Trigger Conditions]
+    S --> T[closePosition if triggered]
 ```
 
-**Implementation Status**: ✅ Completed (Structure exists)
+**Implementation Status**: ✅ Completed
 
 ### 6.2 Core Components
 **Order Configuration**: ✅ Defined in `orderManager.ts` and `orderRepository.ts`.
-**Execution Flow**: ✅ Basic structure in `orderManager.ts`, relies on interval checks (likely within `passiveProcess.ts` or similar loop). Needs verification of polling interval/mechanism. `orderRepository.ts` handles DB storage.
+**Execution Flow**: ✅ Basic structure in `orderManager.ts`, relies on interval checks.
+**Position Trigger Monitoring**: ✅ Implemented in `positionTriggerMonitor.ts`, periodically checks positions for take profit and stop loss conditions.
 
-**Implementation Status**: ✅ Completed (Structure exists)
+**Implementation Status**: ✅ Completed
 
 ### 6.3 Order Types Matrix
 | Type          | Status | Details                                       | Code Reference   |
 |---------------|--------|-----------------------------------------------|------------------|
 | LIMIT         | ✅      | Calls `createSingleSidePosition` (via wrapper) | `orderManager.ts` |
-| TAKE_PROFIT   | ✅      | Calls `removeLiquidity`                       | `orderManager.ts` |
-| STOP_LOSS     | ✅      | Calls `removeLiquidity`                       | `orderManager.ts` |
+| TAKE_PROFIT   | ✅      | For orders: `orderManager.ts`; For positions: `positionTriggerMonitor.ts` | `orderManager.ts`, `positionTriggerMonitor.ts` |
+| STOP_LOSS     | ✅      | For orders: `orderManager.ts`; For positions: `positionTriggerMonitor.ts` | `orderManager.ts`, `positionTriggerMonitor.ts` |
 
 **Implementation Status**: ✅ Completed
 
@@ -218,6 +224,7 @@ graph TD
         A --> RSKM[RiskManager]
         A --> PM[PassiveProcessManager]
         A --> OM[OrderManager Map]
+        A --> PTM[PositionTriggerMonitor]
     end
     subgraph Shared Services
         RM --> PS[PositionStorage]
@@ -230,6 +237,8 @@ graph TD
         OM --> PS
         OM --> OR[OrderRepository]
         OM --> SDK
+        PTM --> PR
+        PTM --> SDK
     end
     PR --> DB[(Supabase DB)]
     OR --> DB
@@ -237,7 +246,7 @@ graph TD
 ```
 
 **Implementation Status**: ✅ Completed
-- Architecture implemented across `app.ts`, manager classes, storage, and repositories.
+- Architecture implemented across `app.ts`, manager classes, storage, and repositories, including the new PositionTriggerMonitor.
 
 ### 7.2 Key Enhancements
 **Unified Position Handling**: ✅ `app.ts` uses `DLMM.getAllLbPairPositionsByUser` and syncs with `PositionStorage`/`PositionRepository`.
@@ -248,19 +257,21 @@ graph TD
 ---
 
 ## 8. Implementation Checklist
-| Component              | Status | Details                                  | Code Reference         |
-|------------------------|--------|------------------------------------------|------------------------|
-| Order Manager          | ✅      | Structure for Limit/TP/SL                | `orderManager.ts`       |
-| Multi-Pool Processes   | ✅      | Position discovery and processing        | `app.ts`, Managers      |
-| Global Fee Tracking    | 🛠      | Basic `dailyAPR`, `totalClaimed` in dash | `dashboard.ts`        |
-| Batch Order Execution  | ❌      | Likely executes orders individually     | `orderManager.ts`       |
-| PnL Tracking           | ✅      | Uses `startingPositionValue`            | `dashboard.ts`, `positionRepository.ts` |
-| Market Selection API   | ✅      | Market fetching and position creation    | `server.ts`, `marketSelector.ts` |
-| Volatility Response    | ❌      | Not implemented                         | N/A                   |
-| Delegation System      | 🛠      | Backend/API structure, on-chain likely incomplete | `server.ts`       |
-| Social Sentiment       | ❌      | Not implemented                         | N/A                   |
-| Alerting System        | ❌      | Not implemented                         | N/A                   |
-| Rug Detection (Basic)  | 🛠      | Token age check implemented             | `selectionIndexer.ts` |
+| Component               | Status | Details                                  | Code Reference         |
+|-------------------------|--------|------------------------------------------|------------------------|
+| Order Manager           | ✅      | Structure for Limit/TP/SL                | `orderManager.ts`       |
+| Position Trigger Monitor| ✅      | Monitors and executes TP/SL              | `positionTriggerMonitor.ts` |
+| Multi-Pool Processes    | ✅      | Position discovery and processing        | `app.ts`, Managers      |
+| Global Fee Tracking     | 🛠      | Basic `dailyAPR`, `totalClaimed` in dash | `dashboard.ts`        |
+| Batch Order Execution   | ❌      | Likely executes orders individually     | `orderManager.ts`       |
+| PnL Tracking            | ✅      | Uses `startingPositionValue`            | `dashboard.ts`, `positionRepository.ts` |
+| Market Selection API    | ✅      | Market fetching and position creation    | `server.ts`, `marketSelector.ts` |
+| Position Trigger API    | ✅      | Set/update position triggers             | `server.ts`, `positionRepository.ts` |
+| Volatility Response     | ❌      | Not implemented                         | N/A                   |
+| Delegation System       | 🛠      | Backend/API structure, on-chain likely incomplete | `server.ts`       |
+| Social Sentiment        | ❌      | Not implemented                         | N/A                   |
+| Alerting System         | ❌      | Not implemented                         | N/A                   |
+| Rug Detection (Basic)   | 🛠      | Token age check implemented             | `selectionIndexer.ts` |
 
 ---
 

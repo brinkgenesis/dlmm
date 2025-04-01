@@ -9,6 +9,7 @@ graph TD
         SVR -- /api/markets --> MS_API[Market Data Logic]
         SVR -- /api/markets/select --> MSC[Market Selection & Creation]
         SVR -- /api/positions --> DASH_API[Dashboard Logic]
+        SVR -- /api/positions/triggers --> TRIGGER_API[Position Trigger Logic]
         SVR -- /api/rebalance/check --> RB_API[Manual Rebalance Trigger]
         SVR -- /api/wallet/... --> AUTH_API[Wallet Auth/Delegation Logic]
         SVR -- /api/orders --> ORDER_API[Order Submission Logic]
@@ -21,6 +22,7 @@ graph TD
 
         MSC --> APP
         DASH_API --> APP
+        TRIGGER_API --> APP
         RB_API --> APP
         AUTH_API -- Creates/Manages? --> APP_USER[User-Specific TradingApp Inst?]
         ORDER_API --> APP
@@ -33,6 +35,7 @@ graph TD
         APP -- Uses --> DASH[Dashboard]
         APP -- Uses --> OM[OrderManager Map]
         APP -- Uses --> PP[PassiveProcessManager]
+        APP -- Uses --> PTM[PositionTriggerMonitor]
         APP -- Uses --> STOR[PositionStorage]
         APP -- Uses --> CFG[Config]
         APP -- Uses --> CONN[Connection]
@@ -89,6 +92,12 @@ graph TD
         PP -- Uses --> SDK
         PP -- Uses --> AC[AutoCompounder]
 
+        PTM -- Uses --> CONN
+        PTM -- Uses --> WLT
+        PTM -- Uses --> CFG
+        PTM -- Uses --> POS_REPO
+        PTM -- Uses --> SDK
+
         AC -- Uses --> SDK
         AC -- Uses --> CREATE_POS
     end
@@ -112,3 +121,5 @@ graph TD
     style DB fill:#f8d7da,stroke:#721c24
     style SOLANA fill:#9cf,stroke:#333
     style External Services fill:#eee,stroke:#999
+    style PTM fill:#d4f7d4,stroke:#333,stroke-width:2px
+    style TRIGGER_API fill:#d4f7d4,stroke:#333,stroke-width:2px

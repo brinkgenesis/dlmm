@@ -31,9 +31,11 @@ Price ranges for positions are typically within -3% to +3% of the current market
 Add Liquidity: ✅ Implemented via `marketSelector.ts`.
 Remove Liquidity: ✅ Implemented as part of rebalancing (`rebalanceManager.ts`), risk management (`riskManager.ts`), and potentially orders (`orderManager.ts`).
 Automatic Position Adjustment: ✅ Implemented in `rebalanceManager.ts` based on price range breach. Closes old and creates new single-sided position.
-Configurable Position Parameters: ✅ Position size (via dollar amount) and side selectable via API. Range is dynamically set around the active bin.
+Take Profit & Stop Loss: ✅ Implemented in `positionTriggerMonitor.ts` and `marketSelector.ts` to set and monitor TP/SL for positions.
+Configurable Position Parameters: ✅ Position size (via dollar amount), side, take profit, and stop loss are selectable via API. Range is dynamically set around the active bin.
 5.2. Market Monitoring
 Real-time Monitoring: ✅ `rebalanceManager.ts` checks active bin relative to position range periodically.
+Take Profit/Stop Loss Monitoring: ✅ `positionTriggerMonitor.ts` checks positions against price triggers periodically.
 Volatility Detection: 🛠 Basic volume drop detection in `riskManager.ts`. Advanced volatility analysis (e.g., Volatility Accumulator) not implemented.
 Price Range Tracking: ✅ Core logic in `rebalanceManager.ts`.
 5.3. Strategy Implementation
@@ -88,6 +90,7 @@ As an analyst, I want to review real-time analytics and performance reports to a
 Backend: ✅ Express.js server (`server.ts`) interacting with core logic in `src`. Not serverless Lambda.
 Database: ✅ Supabase (Postgres) used via `positionRepository`, `marketRepository`, `orderRepository`.
 Monitoring: ✅ Basic console logging. CloudWatch integration depends on deployment, not inherent in code.
+Position Trigger Monitoring: ✅ `positionTriggerMonitor.ts` periodically checks positions against take profit and stop loss levels.
 Optional Frontend: ✅ Backend API exists to support a frontend.
 8.2. Integrations
 Meteora DLMM SDK: ✅ Used extensively (`@meteora-ag/dlmm`).
@@ -95,6 +98,7 @@ Meteora APIs: ✅ Used for market data (`marketRepository.ts`) and position fee 
 Wallet Integration: ✅ Uses `Keypair` for signing. Basic delegated signing structure in `server.ts`, full implementation pending. Jupiter API used for prices.
 8.3. Strategy Implementation
 Automatic Position Adjustment: ✅ Implemented in `rebalanceManager.ts`.
+Take Profit/Stop Loss Execution: ✅ Implemented in `positionTriggerMonitor.ts`.
 Volatility Monitoring: ❌ Volatility Accumulator logic not implemented.
 Liquidity Adjustment Logic: ✅ Uses standard SDK strategies (BidAskImbalanced).
 8.4. Security
@@ -134,14 +138,17 @@ Mitigation: Implement high-availability architectures, regular backups, and robu
 12.1. Automated Range Monitoring
 Continuous Monitoring: ✅ Implemented via `rebalanceManager.ts` interval checks.
 Automatic Adjustments: ✅ Implemented in `rebalanceManager.ts`.
-12.2. Dynamic Fee Optimization
+12.2. Automated Take Profit & Stop Loss
+Position Level Triggers: ✅ Implemented in `positionTriggerMonitor.ts`, allowing positions to set take profit and stop loss levels.
+Automatic Execution: ✅ When position price reaches target levels, `positionTriggerMonitor.ts` automatically closes the position.
+12.3. Dynamic Fee Optimization
 Monitor Dynamic Fees: ❌ Not Implemented.
 Fee Maximization: ❌ Not Implemented.
-12.3. Advanced Strategies
+12.4. Advanced Strategies
 Ranged Limit Orders: 🛠 `orderManager.ts` exists, potentially usable for this.
 Dollar-Cost Averaging (DCA): 🛠 Possible via repeated single-sided LIMIT orders.
 Volatility Capture: ❌ Requires volatility analysis implementation.
-12.4. Farming Rewards
+12.5. Farming Rewards
 Maximize Rewards: *Implicitly done by being in active range*.
 Automated Reward Management: ✅ Basic auto-claim/compound structure in `passiveProcess.ts`/`autoCompounder.ts`.
 ---
@@ -160,6 +167,10 @@ Deployment Scripts: *Not provided/User responsibility*.
 Documentation: ✅ PRD, Core Strategy, Mermaid being updated. Code has comments.
 Test Cases and Results: *Not provided/User responsibility*.
 Performance Reports: ✅ Backend API provides data for reporting.
+REST API:
+- /api/markets/select: ✅ Enhanced to support take profit and stop loss parameters.
+- /api/positions/triggers: ✅ New endpoint to set or update take profit and stop loss levels for existing positions.
+- /api/positions: ✅ Enhanced to include take profit and stop loss data in position information.
 ---
 15. Timeline
 Week 1-2: Requirement analysis, architectural design, and setup of AWS infrastructure.
