@@ -93,7 +93,7 @@ export async function closePosition(
             
             // Add compute budget instructions
             tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }));
-            tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 30000 }));
+     
             
             // Set blockhash and fee payer
             const { blockhash } = await connection.getLatestBlockhash('finalized');
