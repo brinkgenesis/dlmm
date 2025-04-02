@@ -12,6 +12,7 @@ import { UserConfig } from '../frontend/wallet/UserConfig';
 import bs58 from 'bs58';
 import DLMM, { LbPosition, LbPair, PositionInfo } from '@meteora-ag/dlmm';
 import { PositionTriggerMonitor } from './positionTriggerMonitor';
+import { closePosition, findPositionsByPool } from './utils/closePosition';
 
 export class TradingApp {
   private passiveManager?: PassiveProcessManager;
@@ -518,5 +519,70 @@ export class TradingApp {
     
     const app = new TradingApp(connection, serverWallet, config);
     return app;
+  }
+
+  /**
+   * Closes a position with specified options
+   * @param positionKey The public key of the position to close
+   * @param poolAddress The public key of the pool containing the position
+   * @param options Optional parameters for closing the position
+   * @returns Result of the close operation
+   */
+  public async closePositionWithOptions(
+    positionKey: string,
+    poolAddress: string,
+    options?: {
+      bps?: number;
+      shouldRemoveLiquidity?: boolean;
+      swapTokenXToY?: boolean;
+    }
+  ): Promise<{
+    success: boolean;
+    signature?: string;
+    swapSignature?: string;
+    error?: string;
+    swapError?: string;
+  }> {
+    try {
+      console.log(`Closing position ${positionKey} in pool ${poolAddress} with options:`, options);
+      
+      const positionPubkey = new PublicKey(positionKey);
+      const poolPubkey = new PublicKey(poolAddress);
+      
+      return await closePosition(
+        this.connection,
+        this.wallet,
+        this.config,
+        positionPubkey,
+        poolPubkey,
+        options
+      );
+    } catch (error) {
+      console.error('Error in closePositionWithOptions:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
+
+  /**
+   * Finds all positions in a specific pool
+   * @param poolAddress The public key of the pool
+   * @returns Array of position public keys
+   */
+  public async findPositionsInPool(poolAddress: string): Promise<string[]> {
+    try {
+      const poolPubkey = new PublicKey(poolAddress);
+      const positions = await findPositionsByPool(
+        this.connection,
+        this.wallet.publicKey,
+        poolPubkey
+      );
+      return positions.map(pos => pos.toString());
+    } catch (error) {
+      console.error('Error finding positions in pool:', error);
+      return [];
+    }
   }
 } 

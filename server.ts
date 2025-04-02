@@ -780,6 +780,77 @@ app.post('/api/positions/triggers', async (req, res) => {
   }
 });
 
+// Endpoint to close a position
+app.post('/api/positions/close', async (req, res) => {
+  try {
+    const { positionKey, poolAddress, bps, shouldRemoveLiquidity, swapTokenXToY } = req.body;
+    
+    if (!positionKey || !poolAddress) {
+      res.status(400).json({ 
+        success: false, 
+        error: 'Missing required parameters: positionKey and poolAddress are required' 
+        
+      });
+      return;
+    }
+    
+    // Create options object with provided parameters or defaults
+    const options = {
+      bps: typeof bps === 'number' ? bps : 10000, // Default to 100%
+      shouldRemoveLiquidity: shouldRemoveLiquidity !== false, // Default to true
+      swapTokenXToY: swapTokenXToY !== false // Default to true
+    };
+    
+    console.log(`API request to close position ${positionKey} in pool ${poolAddress} with options:`, options);
+    
+    const result = await tradingApp.closePositionWithOptions(
+      positionKey,
+      poolAddress,
+      options
+    );
+    
+    res.json(result);
+    return;
+  } catch (error) {
+    console.error('Error processing close position request:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error closing position'
+    });
+    return;
+  }
+});
+
+// Endpoint to find positions in a pool
+app.get('/api/pools/:poolAddress/positions', async (req, res) => {
+  try {
+    const { poolAddress } = req.params;
+    
+    if (!poolAddress) {
+      res.status(400).json({
+        success: false,
+        error: 'Missing required parameter: poolAddress'
+      });
+      return;
+    }
+    
+    const positions = await tradingApp.findPositionsInPool(poolAddress);
+    
+    res.json({
+      success: true,
+      positions
+    });
+      return;
+  } catch (error) {
+    console.error('Error finding positions in pool:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error finding positions'
+    });
+      return;
+  }
+});
+
 // Start server
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, async () => {
