@@ -4,7 +4,7 @@ import DLMM from '@meteora-ag/dlmm';
 import BN from 'bn.js';
 import { withSafeKeypair } from './utils/walletHelper';
 import { PositionRepository } from './services/positionRepository';
-import { getTokenPricesJupiter } from './utils/fetchPriceJupiter';
+import { getTokenPriceJupiter } from './utils/fetchPriceJupiter';
 import fs from 'fs';
 
 export class PositionTriggerMonitor {
@@ -125,43 +125,23 @@ export class PositionTriggerMonitor {
   }
 
   /**
-   * Gets the current price for a specific pool in USD terms
+   * Gets the current price for token X in USD terms for a specific pool
+   * This is the price we use for take profit/stop loss comparisons
    */
   private async getCurrentPriceForPool(poolAddress: PublicKey): Promise<number> {
     try {
       const dlmm = await this.getDLMMInstance(poolAddress);
-      const activeBin = await dlmm.getActiveBin();
-      const pricePerToken = parseFloat(activeBin.pricePerToken);
       
-      // Get token prices in USD
+      // Get token X's mint address
       const tokenXMint = dlmm.tokenX.publicKey.toString();
-      const tokenYMint = dlmm.tokenY.publicKey.toString();
-      const prices = await getTokenPricesJupiter([tokenXMint, tokenYMint]);
       
-      // If tokenX is the quote token (like USDC), then price is directly in USD
-      if (prices[tokenXMint] && prices[tokenXMint] > 0.95 && prices[tokenXMint] < 1.05) {
-        return pricePerToken;
-      }
+      // Directly fetch token X's price in USD using Jupiter API
+      const tokenXPrice = await getTokenPriceJupiter(tokenXMint);
       
-      // If tokenY is the quote token, invert the price and return
-      if (prices[tokenYMint] && prices[tokenYMint] > 0.95 && prices[tokenYMint] < 1.05) {
-        return 1 / pricePerToken;
-      }
+      console.log(`Pool ${poolAddress.toString()}: Token X (${tokenXMint}) price in USD = $${tokenXPrice}`);
       
-      // Otherwise, need to calculate using both token prices
-      const tokenXPrice = prices[tokenXMint] || 0;
-      const tokenYPrice = prices[tokenYMint] || 0;
-      
-      if (tokenXPrice > 0 && tokenYPrice > 0) {
-        // Price is tokenY per tokenX, so:
-        // USD per tokenY = tokenYPrice
-        // tokenY per tokenX = pricePerToken
-        // USD per tokenX = tokenY per tokenX * USD per tokenY = pricePerToken * tokenYPrice
-        return pricePerToken * tokenYPrice / tokenXPrice;
-      }
-      
-      console.warn(`Could not determine USD price for pool ${poolAddress.toString()}`);
-      return 0;
+      // Return the USD price of token X
+      return tokenXPrice;
     } catch (error) {
       console.error(`Error getting current price for pool ${poolAddress.toString()}:`, error);
       return 0;
@@ -179,16 +159,17 @@ export class PositionTriggerMonitor {
     const positionKey = position.position_key;
     console.log(`\nChecking triggers for position: ${positionKey}`);
     
-    // Skip if price couldn't be determined
+    // Skip if price couldn't be determined or is invalid
     if (currentPrice <= 0) {
-      console.log(`Skipping trigger check for position ${positionKey} due to invalid price.`);
+      console.log(`Skipping trigger check for position ${positionKey} due to invalid USD price: ${currentPrice}`);
       return;
     }
     
+    // Log in USD terms explicitly
     const takeProfitPrice = position.take_profit_price;
     const stopLossPrice = position.stop_loss_price;
     
-    console.log(`Position ${positionKey} - Current: $${currentPrice.toFixed(6)}, TP: ${takeProfitPrice ? '$' + takeProfitPrice.toFixed(6) : 'None'}, SL: ${stopLossPrice ? '$' + stopLossPrice.toFixed(6) : 'None'}`);
+    console.log(`Position ${positionKey} - Current (USD): $${currentPrice.toFixed(6)}, TP (USD): ${takeProfitPrice ? '$' + takeProfitPrice.toFixed(6) : 'None'}, SL (USD): ${stopLossPrice ? '$' + stopLossPrice.toFixed(6) : 'None'}`);
     
     let triggered = false;
     let triggerType: 'TAKE_PROFIT' | 'STOP_LOSS' | null = null;
