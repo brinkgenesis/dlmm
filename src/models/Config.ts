@@ -71,6 +71,20 @@ export class Config {
 
     dotenv.config();
 
+    // Validate required environment variables
+    const required = [
+      'SOLANA_RPC', 'SOLANA_WSS', 'PRIVATE_KEY', 'SUPABASE_URL', 'SUPABASE_SERVICE_KEY',
+      'SOL_Price_ID', 'TOTAL_X_AMOUNT', 'DATA_DIRECTORY', 'METEORA_API_BASE_URL',
+      'VOLATILITY_CHECK_INTERVAL', 'PRICE_FEED_URL', 'DEFAULT_MAX_HISTORY_LENGTH',
+      'ALLOWED_SLIPPAGE_BPS', 'TOTAL_RANGE_INTERVAL', 'BPS_TO_REMOVE',
+      'LIQUIDITY_REMOVAL_UPPER_PERCENT', 'LIQUIDITY_REMOVAL_LOWER_PERCENT'
+    ];
+    
+    const missing = required.filter(varName => !process.env[varName]);
+    if (missing.length > 0) {
+      throw new Error(`Missing required environment variables: ${missing.join(', ')}\n\nPlease create a .env file with all required variables.`);
+    }
+
     const walletKeypair = Config.initializeKeypair();
     const publickey = walletKeypair.publicKey.toString();
     const connection = Config.initializeConnection();

@@ -14,7 +14,7 @@ import cors from 'cors'; // Add this import
 import { Config } from './src/models/Config';
 import { OrderRepository } from './src/services/orderRepository';
 import { MarketRepository } from './src/services/marketRepository';
-import { SelectionIndexer } from './src/SelectionIndexer';
+import { SelectionIndexer } from './src/selectionIndexer';
 import { PositionRepository } from './src/services/positionRepository';
 dotenv.config();
 
