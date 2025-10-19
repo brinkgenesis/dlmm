@@ -21,12 +21,6 @@ An advanced automated liquidity management bot for Meteora's Dynamic Liquidity M
 - Comprehensive error handling and transaction retry logic
 - Rate-limited API endpoints with CORS support
 
-## 🔐 Security Status: CLEAN ✅
-
-**No sensitive data leaks found in codebase!**
-- All secrets properly use environment variables
-- No hardcoded private keys or passwords
-- Proper gitignore configuration
 
 ### Known Dependencies Vulnerability
 The bot has a known vulnerability in the `bigint-buffer` dependency ([CVE-2025-3194](https://github.com/advisories/GHSA-3gc7-fjrx-p6mg)) with **CVSS 7.7/10**, but this is **acceptable for internal use** because:
@@ -45,7 +39,7 @@ The bot has a known vulnerability in the `bigint-buffer` dependency ([CVE-2025-3
 
 ### 1. Installation
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/brinkgenesis/dlmm.git
 cd dlmm
 npm install --legacy-peer-deps
 ```
